@@ -5,13 +5,15 @@
 
 ## In progress
 
-- **Foundation** — scaffold + git-flow + multi-agent workflow. _(this bootstrap)_
+- `feature: providers-day1` — Kalshi + Polymarket clients + `http.ts` (retry +
+  breaker) + normalizers, with fixtures and tests. Code complete + reviewed;
+  offline gate green. **Pending:** run `pnpm verify:providers` locally to confirm
+  500+ live markets (sandbox can't reach the provider APIs).
 
 ## Up next
 
-- `feature: providers-day1` — Kalshi + Polymarket clients + normalizer +
-  `http.ts` (retry policy + circuit breaker) with fixtures and tests. This is the
-  first real feature and the dogfood of the `/feature` workflow.
+- `feature: sync` — pgvector migration + HNSW, cron sync, `/api/health`,
+  degraded flags, hash-diff embed → Redis hot catalog.
 
 ## Notes
 
