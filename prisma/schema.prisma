@@ -1,0 +1,89 @@
+// Hedgehog data model — spec §4.
+// pgvector must be enabled once via raw migration SQL (see prisma/sql/).
+// Money & probability columns are Decimal (never Float) — a deliberate choice.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Provider {
+  KALSHI
+  POLYMARKET
+}
+
+enum MarketStatus {
+  OPEN
+  CLOSED
+  RESOLVED
+}
+
+enum Side {
+  YES
+  NO
+}
+
+enum HedgeStatus {
+  OPEN
+  MARKET_CLOSED
+  RESOLVED_WIN
+  RESOLVED_LOSS
+}
+
+model MarketSnapshot {
+  id         String @id @default(cuid())
+  provider   Provider
+  externalId String // provider's market id / ticker
+
+  question   String
+  eventTitle String? // parent event context (Kalshi)
+  searchText String // question + eventTitle + category → embedded
+  textHash   String // sha256(searchText) — skip unchanged re-embeds
+
+  // Vector dimension MUST equal EMBEDDING_DIM (env) and the HNSW index.
+  // Prisma has no native vector type → queried via typed $queryRaw.
+  embedding Unsupported("vector(1024)")?
+
+  category     String?
+  yesPrice     Decimal   @db.Decimal(6, 4) // 0–1 probability
+  noPrice      Decimal   @db.Decimal(6, 4)
+  volumeUsd    Decimal?  @db.Decimal(18, 2)
+  liquidityUsd Decimal?  @db.Decimal(18, 2)
+  closeTime    DateTime?
+  status       MarketStatus
+  resolvedYes  Boolean?
+  rawTrimmed   Json // debug-relevant fields only, not full payloads
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([provider, externalId])
+  @@index([status, closeTime])
+}
+
+model SavedHedge {
+  id     String @id // CLIENT-generated UUID → idempotent saves
+  anonId String // cookie UUID
+
+  prompt     String // original user text
+  spec       Json // parsed HedgeSpec
+  provider   Provider
+  externalId String
+  question   String // denormalized for display resilience
+
+  side          Side
+  entryPrice    Decimal     @db.Decimal(6, 4)
+  stakeUsd      Decimal     @db.Decimal(12, 2)
+  shares        Decimal     @db.Decimal(14, 4) // stakeUsd / entryPrice
+  status        HedgeStatus
+  settledPnlUsd Decimal?    @db.Decimal(12, 2)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([anonId, createdAt])
+}

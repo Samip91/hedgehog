@@ -1,0 +1,7 @@
+branch="$(git symbolic-ref --short HEAD 2>/dev/null || echo)"
+if [ "$branch" = "main" ] || [ "$branch" = "develop" ]; then
+  echo "✖ Direct pushes to '$branch' are blocked. Open a PR from a feature/ branch."
+  exit 1
+fi
+
+pnpm typecheck && pnpm test

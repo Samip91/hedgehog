@@ -1,0 +1,12 @@
+[
+  {
+    "id": "beach-wedding-rain",
+    "prompt": "I lose $500 if it rains during my beach wedding in Miami on March 21.",
+    "expectedMarketIds": ["fixture-miami-rain-mar"]
+  },
+  {
+    "id": "btc-60k",
+    "prompt": "I'm worried BTC falls below $60k this month.",
+    "expectedMarketIds": ["fixture-btc-below-60k"]
+  }
+]

@@ -1,0 +1,40 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: '/'
+    # Dependency PRs target the git-flow integration branch, not main.
+    target-branch: develop
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    groups:
+      dev-dependencies:
+        dependency-type: development
+        # Only batch safe updates; majors come as individual PRs to weigh alone.
+        update-types:
+          - minor
+          - patch
+    ignore:
+      # Prisma is deliberately pinned to v6 (see docs/PITFALLS.md); don't propose v7.
+      - dependency-name: '@prisma/client'
+        update-types: ['version-update:semver-major']
+      - dependency-name: 'prisma'
+        update-types: ['version-update:semver-major']
+      # Defer core-tooling majors — take these deliberately, not via bot.
+      - dependency-name: 'typescript'
+        update-types: ['version-update:semver-major']
+      - dependency-name: 'eslint'
+        update-types: ['version-update:semver-major']
+      - dependency-name: '@types/node'
+        update-types: ['version-update:semver-major']
+    labels:
+      - dependencies
+
+  - package-ecosystem: github-actions
+    directory: '/'
+    target-branch: develop
+    schedule:
+      interval: weekly
+    labels:
+      - dependencies
+      - ci

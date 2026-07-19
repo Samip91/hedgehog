@@ -1,0 +1,27 @@
+[
+  {
+    "provider": "kalshi",
+    "externalId": "fixture-miami-rain-mar",
+    "question": "Will it rain in Miami on March 21?",
+    "eventTitle": "Miami daily weather",
+    "searchText": "Miami daily weather — Will it rain in Miami on March 21? weather rain precipitation",
+    "category": "weather",
+    "yesPrice": 0.24,
+    "noPrice": 0.76,
+    "liquidityUsd": 12000,
+    "status": "open",
+    "url": "https://kalshi.com/markets/fixture-miami-rain-mar"
+  },
+  {
+    "provider": "polymarket",
+    "externalId": "fixture-btc-below-60k",
+    "question": "Will BTC close below $60,000 this month?",
+    "searchText": "Will BTC close below $60,000 this month? bitcoin crypto price drop",
+    "category": "crypto",
+    "yesPrice": 0.31,
+    "noPrice": 0.69,
+    "liquidityUsd": 250000,
+    "status": "open",
+    "url": "https://polymarket.com/event/fixture-btc-below-60k"
+  }
+]

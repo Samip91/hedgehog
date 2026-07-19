@@ -1,0 +1,11 @@
+branch="$(git symbolic-ref --short HEAD 2>/dev/null || echo)"
+if [ "$branch" = "main" ] || [ "$branch" = "develop" ]; then
+  echo "✖ Direct commits to '$branch' are blocked. Branch off with feature/ or fix/ (see CONTRIBUTING.md)."
+  exit 1
+fi
+
+pnpm exec lint-staged || exit 1
+
+if command -v gitleaks >/dev/null 2>&1; then
+  gitleaks protect --staged --redact -v || { echo "✖ gitleaks found staged secrets — aborting."; exit 1; }
+fi
