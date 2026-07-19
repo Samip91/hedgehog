@@ -1,0 +1,31 @@
+[
+  {
+    "id": "0x1",
+    "question": "Will BTC close below $60,000 this month?",
+    "slug": "btc-below-60k",
+    "outcomes": "[\"Yes\", \"No\"]",
+    "outcomePrices": "[\"0.31\", \"0.69\"]",
+    "volume": "250000",
+    "liquidity": "40000",
+    "endDate": "2030-05-01T00:00:00Z",
+    "active": true,
+    "closed": false,
+    "category": "Crypto"
+  },
+  {
+    "id": "0x2",
+    "question": "Who wins the three-way race?",
+    "outcomes": "[\"A\", \"B\", \"C\"]",
+    "outcomePrices": "[\"0.40\", \"0.35\", \"0.25\"]",
+    "active": true,
+    "closed": false
+  },
+  {
+    "id": "0x3",
+    "question": "Already resolved market",
+    "outcomes": "[\"Yes\", \"No\"]",
+    "outcomePrices": "[\"1.0\", \"0.0\"]",
+    "active": true,
+    "closed": true
+  }
+]
