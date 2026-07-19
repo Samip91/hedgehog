@@ -1,0 +1,29 @@
+{
+  "markets": [
+    {
+      "ticker": "RAIN-MIA-MAR21",
+      "event_ticker": "RAIN-MIA",
+      "title": "Will it rain in Miami on Mar 21?",
+      "subtitle": "Miami",
+      "yes_bid": 22,
+      "yes_ask": 26,
+      "last_price": 24,
+      "volume": 1200,
+      "liquidity": 8000,
+      "close_time": "2030-03-21T23:59:00Z",
+      "category": "Weather"
+    },
+    {
+      "ticker": "BTC-BELOW-60K",
+      "title": "Will BTC be below $60k this month?",
+      "last_price": 31,
+      "volume": 5000,
+      "close_time": "2030-04-01T00:00:00Z"
+    },
+    {
+      "ticker": "NO-PRICE",
+      "title": "Market with no quotes yet"
+    }
+  ],
+  "cursor": ""
+}

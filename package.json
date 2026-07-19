@@ -23,6 +23,7 @@
     "e2e": "playwright test",
     "evals": "tsx evals/run.ts",
     "evals:live": "EVALS_LIVE=1 tsx evals/run.ts",
+    "verify:providers": "tsx scripts/verify-providers.ts",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio",
