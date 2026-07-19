@@ -6,7 +6,9 @@ export const maxDuration = 30
 
 /**
  * POST /api/hedge — parse ∥ warm-up → retrieve → rerank → propose (spec §6.2).
- * Rate-limited (10 / 10min per IP) — spends LLM tokens. Wired in feature: hedge-api.
+ * MUST be rate-limited (10 / 10min per IP) before it goes live — it spends LLM
+ * tokens. The limiter is NOT yet wired; it lands together with the pipeline in
+ * feature: hedge-api, never after.
  */
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null)

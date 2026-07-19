@@ -49,7 +49,7 @@ export const SaveHedgeRequestSchema = z.object({
   externalId: z.string().min(1),
   question: z.string().min(1),
   side: z.enum(['YES', 'NO']),
-  entryPrice: z.number().min(0).max(1),
+  entryPrice: z.number().gt(0).lt(1),
   stakeUsd: z.number().positive(),
 })
 export type SaveHedgeRequest = z.infer<typeof SaveHedgeRequestSchema>
@@ -64,7 +64,10 @@ export function ok<T>(data: T): { ok: true; data: T } {
   return { ok: true, data }
 }
 
-export function err(code: string, message: string): {
+export function err(
+  code: string,
+  message: string
+): {
   ok: false
   error: ApiError
 } {

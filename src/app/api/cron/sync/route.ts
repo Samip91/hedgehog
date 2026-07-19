@@ -23,6 +23,6 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(ok(result))
   } catch (e) {
     const message = e instanceof Error ? e.message : 'sync failed'
-    return NextResponse.json(err('SYNC_FAILED', message), { status: 501 })
+    return NextResponse.json(err('SYNC_FAILED', message), { status: 500 })
   }
 }
