@@ -1,10 +1,5 @@
 import type { NormalizedMarket } from './types'
 
-/** Kalshi prices arrive in cents (1–99); convert to a 0–1 probability. */
-export function centsToProbability(cents: number): number {
-  return Math.min(1, Math.max(0, cents / 100))
-}
-
 export function clamp01(n: number): number {
   return Math.min(1, Math.max(0, n))
 }

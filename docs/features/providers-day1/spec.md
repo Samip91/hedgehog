@@ -24,7 +24,8 @@ spine.
       60s, half-opens with a probe, and closes on success. Unit-tested with fake
       timers.
 - [ ] `kalshiProvider.fetchOpenMarkets()` returns `NormalizedMarket[]` — prices in
-      0–1 (cents/100), `searchText = eventTitle — title subtitle`, binary/open only.
+      0–1 from the live string `*_dollars` fields (bid/ask midpoint, else last_price),
+      `searchText = event_ticker + title + yes_sub_title`, illiquid all-zero dropped.
 - [ ] `polymarketProvider.fetchOpenMarkets()` returns `NormalizedMarket[]` —
       defensively parses the JSON-encoded `outcomes`/`outcomePrices` strings,
       skips non-binary markets, prices already 0–1.

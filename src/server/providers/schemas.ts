@@ -10,18 +10,21 @@ import { z } from 'zod'
  */
 
 // ── Kalshi ──────────────────────────────────────────────────────────────────
+// Verified against the live trade-api/v2 response (2026): prices are STRING
+// dollar amounts already in 0–1 (e.g. "0.24"), not integer cents.
+const numeric = z.union([z.string(), z.number()]).optional()
 export const KalshiMarketSchema = z.object({
   ticker: z.string(),
   event_ticker: z.string().optional(),
   title: z.string(),
-  subtitle: z.string().optional(),
-  yes_bid: z.number().optional(),
-  yes_ask: z.number().optional(),
-  last_price: z.number().optional(),
-  volume: z.number().optional(),
-  liquidity: z.number().optional(),
+  yes_sub_title: z.string().optional(),
+  status: z.string().optional(),
+  yes_bid_dollars: numeric,
+  yes_ask_dollars: numeric,
+  last_price_dollars: numeric,
+  liquidity_dollars: numeric,
+  volume_fp: numeric,
   close_time: z.string().optional(),
-  category: z.string().optional(),
 })
 export type KalshiMarket = z.infer<typeof KalshiMarketSchema>
 

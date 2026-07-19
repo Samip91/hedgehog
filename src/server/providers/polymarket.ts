@@ -15,7 +15,8 @@ import {
 import type { FetchOpts, MarketProvider, NormalizedMarket } from './types'
 
 const BASE = 'https://gamma-api.polymarket.com'
-const PAGE_LIMIT = 200
+const PAGE_LIMIT = 100 // gamma caps a single request at 100
+const DEFAULT_LIMIT = 500 // default total when a caller doesn't specify one
 
 /** Non-binary markets and malformed price/outcome strings are skipped. */
 function normalizeOne(m: PolymarketMarket): NormalizedMarket | null {
@@ -77,18 +78,33 @@ export const polymarketProvider: MarketProvider = {
   name: 'polymarket',
 
   async fetchOpenMarkets(opts?: FetchOpts): Promise<NormalizedMarket[]> {
-    const params = new URLSearchParams({
-      active: 'true',
-      closed: 'false',
-      limit: String(opts?.limit ?? PAGE_LIMIT),
-      order: 'volume',
-      ascending: 'false',
-    })
-    const raw = await fetchJson<unknown>(`${BASE}/markets?${params}`, {
-      timeoutMs: 5000,
-      retries: 2,
-    })
-    return normalizePolymarketMarkets(raw)
+    const target = opts?.limit ?? DEFAULT_LIMIT
+    const out: NormalizedMarket[] = []
+
+    // gamma caps at 100 per request → page with offset until we have enough or
+    // the API runs out. Cap the scan so a sparse tail can't loop forever.
+    for (
+      let offset = 0;
+      out.length < target && offset < target * 4;
+      offset += PAGE_LIMIT
+    ) {
+      const params = new URLSearchParams({
+        active: 'true',
+        closed: 'false',
+        limit: String(PAGE_LIMIT),
+        offset: String(offset),
+        order: 'volume',
+        ascending: 'false',
+      })
+      const raw = await fetchJson<unknown>(`${BASE}/markets?${params}`, {
+        timeoutMs: 5000,
+        retries: 2,
+      })
+      out.push(...normalizePolymarketMarkets(raw))
+      if (!Array.isArray(raw) || raw.length < PAGE_LIMIT) break // last page
+    }
+
+    return out.slice(0, target)
   },
 
   async fetchMarket(externalId: string): Promise<NormalizedMarket> {

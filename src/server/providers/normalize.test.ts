@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildSearchText,
-  centsToProbability,
   clamp01,
   parseJsonStringArray,
   round4,
@@ -9,13 +8,6 @@ import {
 } from './normalize'
 
 describe('normalize helpers', () => {
-  it('centsToProbability divides by 100 and clamps', () => {
-    expect(centsToProbability(24)).toBeCloseTo(0.24, 6)
-    expect(centsToProbability(0)).toBe(0)
-    expect(centsToProbability(150)).toBe(1)
-    expect(centsToProbability(-5)).toBe(0)
-  })
-
   it('clamp01 and round4', () => {
     expect(clamp01(1.4)).toBe(1)
     expect(clamp01(-0.2)).toBe(0)

@@ -4,25 +4,41 @@
       "ticker": "RAIN-MIA-MAR21",
       "event_ticker": "RAIN-MIA",
       "title": "Will it rain in Miami on Mar 21?",
-      "subtitle": "Miami",
-      "yes_bid": 22,
-      "yes_ask": 26,
-      "last_price": 24,
-      "volume": 1200,
-      "liquidity": 8000,
-      "close_time": "2030-03-21T23:59:00Z",
-      "category": "Weather"
+      "yes_sub_title": "Miami",
+      "status": "active",
+      "yes_bid_dollars": "0.22",
+      "yes_ask_dollars": "0.26",
+      "last_price_dollars": "0.24",
+      "liquidity_dollars": "8000",
+      "volume_fp": "1200",
+      "close_time": "2030-03-21T23:59:00Z"
     },
     {
       "ticker": "BTC-BELOW-60K",
       "title": "Will BTC be below $60k this month?",
-      "last_price": 31,
-      "volume": 5000,
+      "status": "active",
+      "yes_bid_dollars": "0.00",
+      "yes_ask_dollars": "0.00",
+      "last_price_dollars": "0.31",
+      "volume_fp": "5000",
       "close_time": "2030-04-01T00:00:00Z"
     },
     {
+      "ticker": "ONE-SIDED",
+      "title": "One-sided book: bid only, no ask",
+      "status": "active",
+      "yes_bid_dollars": "0.30",
+      "yes_ask_dollars": "0.00",
+      "last_price_dollars": "0.28",
+      "close_time": "2030-06-01T00:00:00Z"
+    },
+    {
       "ticker": "NO-PRICE",
-      "title": "Market with no quotes yet"
+      "title": "Illiquid market with no quotes yet",
+      "status": "active",
+      "yes_bid_dollars": "0.00",
+      "yes_ask_dollars": "0.00",
+      "last_price_dollars": "0.00"
     }
   ],
   "cursor": ""
