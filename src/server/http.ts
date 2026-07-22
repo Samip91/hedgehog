@@ -36,6 +36,10 @@ export interface FetchJsonOptions {
   readonly timeoutMs?: number
   readonly retries?: number
   readonly headers?: Record<string, string>
+  /** Defaults to 'GET'. 'POST' pairs with `body` (JSON-encoded). */
+  readonly method?: 'GET' | 'POST'
+  /** JSON-serializable request body; only meaningful with method: 'POST'. */
+  readonly body?: unknown
   /** Test seams — default to real implementations. */
   readonly fetchImpl?: typeof fetch
   readonly sleep?: (ms: number) => Promise<void>
@@ -99,6 +103,8 @@ export async function fetchJson<T>(
     timeoutMs = DEFAULT_TIMEOUT_MS,
     retries = DEFAULT_RETRIES,
     headers,
+    method = 'GET',
+    body,
     fetchImpl = fetch,
     sleep = realSleep,
     random = Math.random,
@@ -108,8 +114,13 @@ export async function fetchJson<T>(
   for (let attempt = 0; attempt <= retries; attempt++) {
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), timeoutMs)
-    const init: RequestInit = { signal: controller.signal }
-    if (headers) init.headers = headers
+    const init: RequestInit = { signal: controller.signal, method }
+    if (body !== undefined) {
+      init.body = JSON.stringify(body)
+      init.headers = { 'content-type': 'application/json', ...headers }
+    } else if (headers) {
+      init.headers = headers
+    }
 
     try {
       const res = await fetchImpl(url, init)

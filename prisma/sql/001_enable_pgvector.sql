@@ -6,7 +6,10 @@ CREATE EXTENSION IF NOT EXISTS vector;
 
 -- After `prisma migrate` creates "MarketSnapshot", add the HNSW index for fast
 -- cosine similarity search (spec §4). Keep the dimension in sync with
--- EMBEDDING_DIM and prisma vector(N).
+-- EMBEDDING_DIM (1024) and prisma's `vector(1024)` column type — see ADR 001.
 --
---   CREATE INDEX IF NOT EXISTS marketsnapshot_embedding_hnsw
---     ON "MarketSnapshot" USING hnsw (embedding vector_cosine_ops);
+-- Authored only; NOT applied to a provisioned database as part of this
+-- feature (spec AC 21).
+
+CREATE INDEX IF NOT EXISTS marketsnapshot_embedding_hnsw
+  ON "MarketSnapshot" USING hnsw (embedding vector_cosine_ops);
