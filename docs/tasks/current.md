@@ -5,16 +5,18 @@
 
 ## In progress
 
-- `feature: parse` — `parseRisk()`: NIM chat (`LLM_PARSE_MODEL`) → JSON-only
-  `HedgeSpec`, Zod `safeParse` + one retry feeding the error back, degraded
-  keyword-only fallback; injection-safe two-role prompt; `evals/run.ts` wired with
-  a `parsePassRate ≥ 0.85` gate (offline via a committed DI fixture — ADR 002).
-  Branch `feature/parse-hedgespec`. Code complete, reviewer **APPROVED** (2 rounds
-  — 1 major + 2 minors fixed), full offline gate green (typecheck · lint · test
-  115/115 · evals 100% · build w/ `SKIP_ENV_VALIDATION=1`). **Not merged** — run
-  `/ship` (PR to `develop`). **Pending:** refresh `evals/fixtures/parse-responses.json`
-  against live NIM via `pnpm evals:live` (offline fixture is hand-authored; sandbox
-  can't reach NIM).
+- `feature: retrieval` — query embedding (`embedText`, NIM `input_type: 'query'`)
+  - hybrid retrieve (pgvector HNSW cosine top-50 via typed `$queryRaw` + keyword +
+    liquidity boost, hard filters, cross-provider dedupe, top-15) + degraded
+    keyword-only fallback when the embedding API is down; `evals/run.ts` wired with
+    a `recall@15 ≥ 0.85` gate + report-only MRR, deterministic/offline via an
+    injected-seam + toy-embedder (ADR 003). Branch `feature/retrieval-hybrid`. Code
+    complete, reviewer **APPROVED** (1 round + a report-only-MRR min-rank fix), full
+    offline gate green (typecheck · lint · test 139/139 · evals: parse 100%,
+    retrieval recall@15 100% / MRR 1.0 · build w/ `SKIP_ENV_VALIDATION=1`).
+    **Not merged** — run `/ship` (PR to `develop`). Follow-ups (deferred, backlogged):
+    grow `evals/fixtures/catalog.json` beyond 2 markets so recall@15/MRR discriminate;
+    persist `url`/slug on `MarketSnapshot` for faithful deep links.
 
 - `feature: providers-day1` — Kalshi + Polymarket clients + `http.ts` (retry +
   breaker) + normalizers, with fixtures and tests. Code complete + reviewed;
@@ -23,8 +25,8 @@
 
 ## Up next
 
-- `feature: retrieval` — query embedding + hybrid retrieve (pgvector HNSW +
-  keyword) + fixture recall@15 eval.
+- `feature: rerank` — LLM rerank + relevance labels, consuming `Candidate[]`
+  from `retrieveCandidates()`.
 
 ## Notes
 
