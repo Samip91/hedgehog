@@ -22,10 +22,15 @@ import {
   EmbeddingCountError,
   EmbeddingDimError,
   embedBatch,
+  embedText,
 } from './embed'
 
 interface PostOpts {
   readonly body: { input: string[] }
+}
+
+interface QueryPostOpts {
+  readonly body: { input: string[]; input_type: string }
 }
 
 describe('embedBatch', () => {
@@ -99,5 +104,51 @@ describe('embedBatch', () => {
       [1, 1, 1, 1],
       [9, 9, 9, 9],
     ])
+  })
+})
+
+describe('embedText', () => {
+  beforeEach(() => {
+    mocks.fetchJson.mockReset()
+  })
+
+  // AC 1: query embedding uses input_type: 'query' (not 'passage'), and
+  // wraps the single text in a length-1 `input` array.
+  it("POSTs input_type: 'query' and input: [text], reusing the NIM plumbing", async () => {
+    let capturedBody: QueryPostOpts['body'] | undefined
+    mocks.fetchJson.mockImplementation(
+      async (_url: string, opts: QueryPostOpts) => {
+        capturedBody = opts.body
+        return { data: [{ index: 0, embedding: [1, 2, 3, 4] }] }
+      }
+    )
+
+    const vector = await embedText('will it rain in miami on march 21?')
+
+    expect(capturedBody).toMatchObject({
+      input: ['will it rain in miami on march 21?'],
+      input_type: 'query',
+    })
+    expect(vector).toEqual([1, 2, 3, 4])
+  })
+
+  // AC 2: mirrors embedOneBatch's per-vector dim check.
+  it('rejects with EmbeddingDimError when the returned vector length !== EMBEDDING_DIM', async () => {
+    mocks.fetchJson.mockResolvedValueOnce({
+      data: [{ index: 0, embedding: [1, 2, 3] }], // length 3, EMBEDDING_DIM is 4
+    })
+
+    await expect(embedText('short vector')).rejects.toBeInstanceOf(
+      EmbeddingDimError
+    )
+  })
+
+  // AC 3: embedText never silently resolves a zero/partial vector — any
+  // HTTP/schema failure propagates; only retrieveCandidates's degraded-mode
+  // catch (AC 15–16) is allowed to swallow it.
+  it('propagates rejection when fetchJson rejects — never resolves', async () => {
+    mocks.fetchJson.mockRejectedValueOnce(new Error('network down'))
+
+    await expect(embedText('any text')).rejects.toThrow('network down')
   })
 })

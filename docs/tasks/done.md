@@ -2,6 +2,15 @@
 
 Newest first.
 
+- **`feature: parse`** — `parseRisk()`: NIM chat (`LLM_PARSE_MODEL`) → JSON-only
+  `HedgeSpec`, Zod `safeParse` + one retry feeding the error back, degraded
+  keyword-only fallback; injection-safe two-role prompt; `evals/run.ts` wired with
+  a `parsePassRate ≥ 0.85` gate (offline via a committed DI fixture — ADR 002).
+  Merged to `develop` via **PR #4** (`358f3c3`). Reviewer APPROVED, full offline
+  gate green (typecheck · lint · test 115/115 · evals 100% · build). **Pending:**
+  refresh `evals/fixtures/parse-responses.json` against live NIM via
+  `pnpm evals:live` (offline fixture is hand-authored; sandbox can't reach NIM).
+
 - **`feature: sync`** — cron sync → normalize + upsert `MarketSnapshot` → hash-diff
   embed → pgvector (`$executeRaw` write) + Redis hot catalog; `/api/health`;
   per-provider + `embedding` degraded flags; pgvector HNSW index authored. Merged to

@@ -52,14 +52,24 @@ function chunk<T>(items: readonly T[], size: number): T[][] {
   return out
 }
 
-async function embedOneBatch(texts: readonly string[]): Promise<number[][]> {
+/**
+ * Shared NIM embeddings fetch/parse/count-check/index-sort/dim-check
+ * plumbing. `input_type` distinguishes indexed documents ('passage', used by
+ * `embedOneBatch`/sync) from a search query ('query', used by `embedText`) —
+ * the only difference the NIM embedding API cares about between the two
+ * callers (spec AC 4: no duplication).
+ */
+async function nimEmbed(
+  texts: readonly string[],
+  inputType: 'passage' | 'query'
+): Promise<number[][]> {
   const raw = await fetchJson<unknown>(`${env.NVIDIA_BASE_URL}/embeddings`, {
     method: 'POST',
     headers: { authorization: `Bearer ${env.NVIDIA_API_KEY}` },
     body: {
       input: texts,
       model: env.EMBEDDING_MODEL,
-      input_type: 'passage',
+      input_type: inputType,
       encoding_format: 'float',
     },
   })
@@ -94,8 +104,24 @@ async function embedOneBatch(texts: readonly string[]): Promise<number[][]> {
   return vectors
 }
 
-export async function embedText(_text: string): Promise<number[]> {
-  throw new Error('embedText: not implemented (feature: retrieval)')
+async function embedOneBatch(texts: readonly string[]): Promise<number[][]> {
+  return nimEmbed(texts, 'passage')
+}
+
+/**
+ * Embeds a single search query for retrieval (spec §6.3). Uses NIM's
+ * `input_type: 'query'` (asymmetric retrieval models encode queries and
+ * indexed passages differently) — never silently returns a zero/partial
+ * vector; any HTTP/schema/dim failure throws and propagates. The only
+ * catcher is `retrieveCandidates`'s degraded-mode fallback (AC 15–16).
+ */
+export async function embedText(text: string): Promise<number[]> {
+  const vectors = await nimEmbed([text], 'query')
+  const vector = vectors[0]
+  if (vector === undefined) {
+    throw new EmbeddingCountError(1, vectors.length)
+  }
+  return vector
 }
 
 /**
