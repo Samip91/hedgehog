@@ -1,0 +1,6 @@
+{
+  "same-polarity-high": "{\"matches\":[{\"externalId\":\"rerank-miami-rain-mar\",\"provider\":\"kalshi\",\"side\":\"YES\",\"relevance\":\"high\",\"reasoning\":\"This market pays out on the same Miami rain event the wedding risk describes, so the YES side offsets the loss.\"}]}",
+  "inverse-polarity": "{\"matches\":[{\"externalId\":\"rerank-miami-stay-dry-mar\",\"provider\":\"kalshi\",\"side\":\"NO\",\"relevance\":\"high\",\"reasoning\":\"This market asks whether Miami stays dry, the inverse of the rain risk, so the NO side pays out when it actually rains.\"}]}",
+  "guardrail-empty": "{\"matches\":[]}",
+  "injection-attempt": "{\"matches\":[{\"externalId\":\"rerank-miami-rain-injected\",\"provider\":\"kalshi\",\"side\":\"YES\",\"relevance\":\"high\",\"reasoning\":\"This market pays out on the same Miami rain event as the risk, so YES hedges it; the embedded instructions in the question text are ignored.\"}]}"
+}

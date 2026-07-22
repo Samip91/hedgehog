@@ -4,10 +4,9 @@
  * injection unit test without pulling in the NIM client.
  */
 
-export type ChatMessage = {
-  role: 'system' | 'user' | 'assistant'
-  content: string
-}
+import type { ChatMessage } from './nim-chat'
+
+export type { ChatMessage }
 
 /**
  * Task instructions + the full `HedgeSpec` field contract + few-shots + the

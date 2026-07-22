@@ -18,12 +18,16 @@ import {
 } from '@/server/pipeline/parse'
 import {
   retrieveCandidates,
+  type Candidate,
   type RetrieveDeps,
   type ScoredMarket,
 } from '@/server/pipeline/retrieve'
+import { rerank, type RankedMatch } from '@/server/pipeline/rank'
+import { chatComplete as sharedChatComplete } from '@/server/pipeline/nim-chat'
 import { buildNormalizedMarket } from '@/server/providers/normalize'
 import type { NormalizedMarket } from '@/server/providers/types'
-import type { HedgeSpec } from '@/shared/schemas'
+import { HedgeSpecSchema, type HedgeSpec } from '@/shared/schemas'
+import { env } from '@/config/env'
 import { cosineSim, toyEmbed } from './lib/toy-embed'
 
 const here = dirname(fileURLToPath(import.meta.url))
@@ -31,6 +35,7 @@ const live = Boolean(process.env.EVALS_LIVE)
 
 const PARSE_PASS_THRESHOLD = 0.85
 const RETRIEVAL_PASS_THRESHOLD = 0.85
+const RERANK_PASS_THRESHOLD = 0.85
 
 interface ParseCase {
   id: string
@@ -41,6 +46,110 @@ interface RetrievalCase {
   id: string
   prompt: string
   expectedMarketIds: string[]
+}
+
+/** Self-contained rerank cases carry their own `spec` + inline `candidates`
+ * (plan Q4) so the frozen retrieval `fixtures/catalog.json` stays untouched. */
+const RerankCaseCandidateSchema = z.object({
+  provider: z.enum(['kalshi', 'polymarket']),
+  externalId: z.string().min(1),
+  question: z.string().min(1),
+  eventTitle: z.string().optional(),
+  searchText: z.string().min(1),
+  category: z.string().optional(),
+  yesPrice: z.number(),
+  noPrice: z.number(),
+  volumeUsd: z.number().optional(),
+  liquidityUsd: z.number().optional(),
+  closeTime: z.coerce.date().optional(),
+  status: z.enum(['open', 'closed', 'resolved']),
+  resolvedYes: z.boolean().optional(),
+  url: z.string().min(1),
+})
+
+const RerankExpectSchema = z.union([
+  z.object({ empty: z.literal(true) }),
+  z.object({
+    matches: z.array(
+      z.object({
+        externalId: z.string().min(1),
+        side: z.enum(['YES', 'NO']),
+        relevance: z.enum(['high', 'partial', 'weak']),
+      })
+    ),
+  }),
+])
+
+const RerankCaseSchema = z.object({
+  id: z.string().min(1),
+  spec: HedgeSpecSchema,
+  candidates: z.array(RerankCaseCandidateSchema).min(1),
+  expect: RerankExpectSchema,
+})
+type RerankCase = z.infer<typeof RerankCaseSchema>
+
+function loadRerankCases(): RerankCase[] {
+  const raw = load<unknown[]>('rerank-cases.json')
+  return raw.map((entry, i) => {
+    const parsed = RerankCaseSchema.safeParse(entry)
+    if (!parsed.success) {
+      throw new Error(
+        `rerank-cases.json[${i}] failed validation: ${parsed.error.message}`
+      )
+    }
+    return parsed.data
+  })
+}
+
+/** Case candidate → in-memory `Candidate` (cosine/keyword/score: 0 — rerank
+ * doesn't consult retrieval's score, only the model). */
+function candidatesForCase(c: RerankCase): Candidate[] {
+  return c.candidates.map(m => ({
+    market: buildNormalizedMarket(
+      {
+        provider: m.provider,
+        externalId: m.externalId,
+        question: m.question,
+        searchText: m.searchText,
+        yesPrice: m.yesPrice,
+        noPrice: m.noPrice,
+        status: m.status,
+        url: m.url,
+      },
+      {
+        eventTitle: m.eventTitle,
+        category: m.category,
+        volumeUsd: m.volumeUsd,
+        liquidityUsd: m.liquidityUsd,
+        closeTime: m.closeTime,
+        resolvedYes: m.resolvedYes,
+      }
+    ),
+    cosine: 0,
+    keyword: 0,
+    score: 0,
+  }))
+}
+
+/** Per Q4: `empty:true` passes iff `result.length === 0`; else the mapped
+ * result must be length-exact and order-sensitive on `externalId`/`side`/
+ * `relevance`, with every `reasoning` non-empty. */
+function scoreRerankCase(
+  expect: RerankCase['expect'],
+  result: RankedMatch[]
+): boolean {
+  if ('empty' in expect) return result.length === 0
+  if (result.length !== expect.matches.length) return false
+  return expect.matches.every((expected, i) => {
+    const actual = result[i]
+    return (
+      actual !== undefined &&
+      actual.candidate.market.externalId === expected.externalId &&
+      actual.side === expected.side &&
+      actual.relevance === expected.relevance &&
+      actual.reasoning.length > 0
+    )
+  })
 }
 
 /** Validated at the fixture-load boundary (Zod), mirrors `NormalizedMarket`.
@@ -276,9 +385,78 @@ async function runParseCases(parseCases: ParseCase[]): Promise<number> {
   return parseCases.length === 0 ? 1 : passed / parseCases.length
 }
 
+/** Offline: replay the frozen rerank fixture per case id, hard-erroring if absent. */
+function offlineRerankChatFor(
+  caseId: string,
+  fixtures: Record<string, string>
+): ChatFn {
+  return async () => {
+    const content = fixtures[caseId]
+    if (content === undefined) {
+      throw new Error(
+        `evals/fixtures/rerank-responses.json is missing case "${caseId}" — run \`pnpm evals:live\` to refresh it.`
+      )
+    }
+    return content
+  }
+}
+
+/** Live: the shared NIM client bound to `LLM_RERANK_MODEL`, recording the
+ * content it returns for this case. */
+function liveRerankChatFor(
+  caseId: string,
+  recorded: Record<string, string>
+): ChatFn {
+  return async (messages: ChatMessage[]) => {
+    const content = await sharedChatComplete(messages, env.LLM_RERANK_MODEL)
+    recorded[caseId] = content
+    return content
+  }
+}
+
+async function runRerankCases(rerankCases: RerankCase[]): Promise<number> {
+  const fixtures = live
+    ? {}
+    : load<Record<string, string>>('fixtures/rerank-responses.json')
+  const recorded: Record<string, string> = {}
+
+  let passed = 0
+  for (const c of rerankCases) {
+    if (!live && fixtures[c.id] === undefined) {
+      throw new Error(
+        `rerank fixture missing for case "${c.id}" — run \`pnpm evals:live\` to record it.`
+      )
+    }
+
+    const chat = live
+      ? liveRerankChatFor(c.id, recorded)
+      : offlineRerankChatFor(c.id, fixtures)
+
+    const candidates = candidatesForCase(c)
+    const result = await rerank(c.spec, candidates, { chat })
+
+    const ok = scoreRerankCase(c.expect, result)
+    if (ok) passed++
+    console.log(`  rerank  ${ok ? '·' : '✗'}  ${c.id}`)
+  }
+
+  if (live) {
+    writeFileSync(
+      join(here, 'fixtures/rerank-responses.json'),
+      `${JSON.stringify(recorded, null, 2)}\n`
+    )
+    console.log(
+      '\nRecorded live responses to evals/fixtures/rerank-responses.json\n'
+    )
+  }
+
+  return rerankCases.length === 0 ? 1 : passed / rerankCases.length
+}
+
 async function main(): Promise<number> {
   const parseCases = load<ParseCase[]>('cases.json')
   const retrievalCases = load<RetrievalCase[]>('retrieval-cases.json')
+  const rerankCases = loadRerankCases()
   const catalog = loadCatalog()
 
   console.log(
@@ -301,8 +479,14 @@ async function main(): Promise<number> {
   console.log(`retrievalMRR: ${mrr.toFixed(3)} (report-only, no gate)`)
   if (recall < RETRIEVAL_PASS_THRESHOLD) bad++
 
+  const rerankPassRate = await runRerankCases(rerankCases)
   console.log(
-    `\n${parseCases.length} parse cases, ${retrievalCases.length} retrieval cases run.\n`
+    `\nrerankPassRate: ${(rerankPassRate * 100).toFixed(1)}% (threshold ${(RERANK_PASS_THRESHOLD * 100).toFixed(0)}%)`
+  )
+  if (rerankPassRate < RERANK_PASS_THRESHOLD) bad++
+
+  console.log(
+    `\n${parseCases.length} parse cases, ${retrievalCases.length} retrieval cases, ${rerankCases.length} rerank cases run.\n`
   )
 
   return bad === 0 ? 0 : 1

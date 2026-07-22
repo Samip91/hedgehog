@@ -5,18 +5,16 @@
 
 ## In progress
 
-- `feature: retrieval` — query embedding (`embedText`, NIM `input_type: 'query'`)
-  - hybrid retrieve (pgvector HNSW cosine top-50 via typed `$queryRaw` + keyword +
-    liquidity boost, hard filters, cross-provider dedupe, top-15) + degraded
-    keyword-only fallback when the embedding API is down; `evals/run.ts` wired with
-    a `recall@15 ≥ 0.85` gate + report-only MRR, deterministic/offline via an
-    injected-seam + toy-embedder (ADR 003). Branch `feature/retrieval-hybrid`. Code
-    complete, reviewer **APPROVED** (1 round + a report-only-MRR min-rank fix), full
-    offline gate green (typecheck · lint · test 139/139 · evals: parse 100%,
-    retrieval recall@15 100% / MRR 1.0 · build w/ `SKIP_ENV_VALIDATION=1`).
-    **Not merged** — run `/ship` (PR to `develop`). Follow-ups (deferred, backlogged):
-    grow `evals/fixtures/catalog.json` beyond 2 markets so recall@15/MRR discriminate;
-    persist `url`/slug on `MarketSnapshot` for faithful deep links.
+- `feature: rerank` — LLM rerank (large model, `LLM_RERANK_MODEL`) over the top-15
+  `Candidate[]` → up to 3 `RankedMatch` (correct YES/NO `side`, `relevance`
+  high/partial/weak, one-sentence reasoning); subset-only mapping, one
+  retry-on-invalid, injection-safe two-role prompt, `[]`-only degraded fallback
+  (guardrail). Headline: extracted the shared `nim-chat.ts` client out of `parse.ts`
+  (ADR 004) — behavior-preserving, `parse.test.ts` green unmodified. Branch
+  `feature/rerank-llm`. Code complete, reviewer **APPROVED** (1 round + a missing-
+  fixture loud-error fix), full offline gate green (typecheck · lint · test 169/169 ·
+  evals: parse 100%, retrieval recall@15 100%, rerank 100% · build w/
+  `SKIP_ENV_VALIDATION=1`). **Not merged** — run `/ship` (PR to `develop`).
 
 - `feature: providers-day1` — Kalshi + Polymarket clients + `http.ts` (retry +
   breaker) + normalizers, with fixtures and tests. Code complete + reviewed;
@@ -25,8 +23,8 @@
 
 ## Up next
 
-- `feature: rerank` — LLM rerank + relevance labels, consuming `Candidate[]`
-  from `retrieveCandidates()`.
+- `feature: propose` — hedge math wiring + `/api/hedge` end-to-end (consumes
+  `RankedMatch[]` from `rerank`). Then `feature: ui-ask-proposal`.
 
 ## Notes
 
@@ -39,5 +37,3 @@
   to auto-clean merged branches (`origin/feature/sync-catalog` is still lingering).
 - Deferred out of `feature: sync`: market lifecycle CLOSED/RESOLVED transitions
   (stale DB rows are harmless — the hot catalog only carries the latest fetch).
-- LLM chat client lives local to `parse.ts`; extract a shared `nim-chat.ts` when
-  `feature: rerank` adds the second chat caller (ADR 002).

@@ -1,13 +1,16 @@
-import { z } from 'zod'
 import { env } from '@/config/env'
-import { fetchJson, SchemaMismatchError } from '@/server/http'
-import { payloadPreview } from '@/server/providers/normalize'
 import { HedgeSpecSchema, type HedgeSpec } from '@/shared/schemas'
 import {
   buildMessages,
   buildRetryMessages,
   type ChatMessage,
 } from './parse-prompt'
+import {
+  chatComplete as sharedChatComplete,
+  extractJsonObject,
+  tryChat,
+  type ChatFn,
+} from './nim-chat'
 import { degradedSpec } from './degraded-parse'
 
 /**
@@ -17,71 +20,21 @@ import { degradedSpec } from './degraded-parse'
  * over the raw user text.
  */
 
-export type { ChatMessage }
-export type ChatFn = (messages: ChatMessage[]) => Promise<string>
+export type { ChatMessage, ChatFn }
 export interface ParseDeps {
   chat?: ChatFn
 }
 
-const NimChatResponseSchema = z.object({
-  choices: z
-    .array(z.object({ message: z.object({ content: z.string() }) }))
-    .min(1),
-})
-
-/** The only code in this module that touches the network. */
+/** Single-arg `chatComplete` bound to `LLM_PARSE_MODEL` (ADR 004) — preserves
+ * this module's public surface post-extraction (`parse.test.ts` + the parse
+ * eval stay green unmodified). The shared client is the only code that
+ * touches the network. */
 export async function chatComplete(messages: ChatMessage[]): Promise<string> {
-  const raw = await fetchJson<unknown>(
-    `${env.NVIDIA_BASE_URL}/chat/completions`,
-    {
-      method: 'POST',
-      headers: { authorization: `Bearer ${env.NVIDIA_API_KEY}` },
-      body: {
-        model: env.LLM_PARSE_MODEL,
-        messages,
-        temperature: 0,
-        response_format: { type: 'json_object' },
-      },
-    }
-  )
-
-  const parsed = NimChatResponseSchema.safeParse(raw)
-  if (!parsed.success) {
-    throw new SchemaMismatchError('NIM chat response', payloadPreview(raw))
-  }
-
-  // Length-guarded by `.min(1)` above; use an explicit check, not `!`.
-  const first = parsed.data.choices[0]
-  if (first === undefined) {
-    throw new SchemaMismatchError('NIM chat response', payloadPreview(raw))
-  }
-  return first.message.content
+  return sharedChatComplete(messages, env.LLM_PARSE_MODEL)
 }
 
 type ParseResult =
   { success: true; data: HedgeSpec } | { success: false; issues: string }
-
-/** Strip a ```json fence if present, then fall back to first-`{`…last-`}`. */
-function extractJsonObject(content: string): unknown | null {
-  const trimmed = content.trim()
-  const fenceMatch = /^```(?:json)?\s*([\s\S]*?)\s*```$/.exec(trimmed)
-  const unfenced = (fenceMatch ? fenceMatch[1] : trimmed) ?? trimmed
-
-  try {
-    return JSON.parse(unfenced) as unknown
-  } catch {
-    // fall through to brace-slice recovery
-  }
-
-  const start = unfenced.indexOf('{')
-  const end = unfenced.lastIndexOf('}')
-  if (start === -1 || end === -1 || end <= start) return null
-  try {
-    return JSON.parse(unfenced.slice(start, end + 1)) as unknown
-  } catch {
-    return null
-  }
-}
 
 /** JSON extraction + `HedgeSpecSchema.safeParse`, uniform failure shape. */
 export function extractAndParse(content: string): ParseResult {
@@ -95,18 +48,6 @@ export function extractAndParse(content: string): ParseResult {
     parsed.error.issues.map(i => ({ path: i.path, message: i.message }))
   )
   return { success: false, issues }
-}
-
-/** `chat`, swallowing network/HTTP errors into `null` for the degraded-mode check. */
-async function tryChat(
-  chat: ChatFn,
-  messages: ChatMessage[]
-): Promise<string | null> {
-  try {
-    return await chat(messages)
-  } catch {
-    return null
-  }
 }
 
 export async function parseRisk(

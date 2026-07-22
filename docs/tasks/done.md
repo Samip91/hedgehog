@@ -2,6 +2,16 @@
 
 Newest first.
 
+- **`feature: retrieval`** — `embedText` (NIM query embedding) + `retrieveCandidates`:
+  hard filters → hybrid score (`0.60·cosine + 0.25·keyword + 0.15·liquidity`) →
+  cross-provider dedupe → top-15 `Candidate[]`; pgvector HNSW cosine top-50 via typed
+  `$queryRaw`; keyword-only degraded fallback. `evals/run.ts` wired with recall@15 ≥
+  0.85 gate + report-only MRR, deterministic offline via injected seams + a toy
+  embedder (ADR 003). Merged to `develop` via **PR #5** (`1f3d527`). Reviewer APPROVED.
+  Offline gate green (test 140/140, recall@15 100%). **Follow-ups (backlogged):** grow
+  `evals/fixtures/catalog.json` beyond 2 markets so recall@15/MRR/dedupe discriminate;
+  persist `url`/slug on `MarketSnapshot` for faithful deep links.
+
 - **`feature: parse`** — `parseRisk()`: NIM chat (`LLM_PARSE_MODEL`) → JSON-only
   `HedgeSpec`, Zod `safeParse` + one retry feeding the error back, degraded
   keyword-only fallback; injection-safe two-role prompt; `evals/run.ts` wired with
