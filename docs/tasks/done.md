@@ -2,6 +2,16 @@
 
 Newest first.
 
+- **`feature: propose`** — wires the 4-stage pipeline (`parse → retrieve → rerank →
+buildProposal`) behind `POST /api/hedge`: sized `HedgeProposal` (payoff math via
+  `hedgeMath`, invalid-price matches dropped, `.finite()` schema backstop), a narrow
+  `/api/hedge`-only fixed-window rate limiter (10/10min per IP, atomic `SET NX EX`
+  init, fail-open — ADR 005), and the `requestHedge()` client return-type fix. Merged
+  to `develop` via **PR #7** (`241e0af`). Reviewer APPROVED (1 round + 2 minors fixed
+  — rate-limit orphan guard + schema backstop), full offline gate green (typecheck ·
+  lint · test 206/206 · evals unchanged · build w/ `SKIP_ENV_VALIDATION=1`). First
+  end-to-end pipeline composition; persistence deferred to `feature: saved-hedges`.
+
 - **`feature: rerank`** — LLM rerank (large model, `LLM_RERANK_MODEL`) over the top-15
   `Candidate[]` → up to 3 `RankedMatch` (correct YES/NO `side`, `relevance`
   high/partial/weak, one-sentence reasoning); subset-only mapping, one
