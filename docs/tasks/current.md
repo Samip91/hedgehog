@@ -5,26 +5,22 @@
 
 ## In progress
 
-- `feature: propose` — wires the 4-stage pipeline (`parse → retrieve → rerank →
-buildProposal`) behind `POST /api/hedge`: sized `HedgeProposal` (payoff math via
-  `hedgeMath`, invalid-price matches dropped, `.finite()` schema backstop), a narrow
-  `/api/hedge`-only fixed-window rate limiter (10/10min per IP, atomic `SET NX EX`
-  init, fail-open — ADR 005), and the `requestHedge()` client return-type fix. Branch
-  `feature/propose-hedge`. Code complete, reviewer **APPROVED** (1 round + 2 minors
-  fixed — rate-limit orphan guard + schema backstop), full offline gate green
-  (typecheck · lint · test 206/206 · evals unchanged · build w/ `SKIP_ENV_VALIDATION=1`).
-  **Not merged** — run `/ship` (PR to `develop`, no AI attribution in the body).
-  First end-to-end pipeline composition; persistence deferred to `feature: saved-hedges`.
+- `feature: ui-ask-proposal` — Proposal screen (parsed-risk card, best-match
+  sized/unsized cards, native stake slider re-running client-side `computeHedge`,
+  Recharts 2-outcome payoff diagram, compact alternatives, no-hedge/error states)
+  rendering the `HedgeProposal` inline from `feature: propose`. First **frontend**
+  slice — also stood up the UI test infra (Vitest jsdom project + Testing Library,
+  isolated from the 206 backend node tests — ADR 006) + first Playwright e2e.
+  Branch `feature/ui-ask-proposal`. Code complete, reviewer **APPROVED (1 round)**,
+  full offline gate green (typecheck · lint · test 269/269 · evals · build w/
+  `SKIP_ENV_VALIDATION=1`). **Not merged** — run `/ship` (PR to `develop`, no AI
+  attribution). Deferred: slider/diagram on alternatives; live price refresh; a
+  live-pipeline e2e (the smoke stubs `/api/hedge`).
 
 - `feature: providers-day1` — Kalshi + Polymarket clients + `http.ts` (retry +
   breaker) + normalizers, with fixtures and tests. Code complete + reviewed;
   offline gate green. **Pending:** run `pnpm verify:providers` locally to confirm
   500+ live markets (sandbox can't reach the provider APIs).
-
-## Up next
-
-- `feature: ui-ask-proposal` — Proposal screen (stake slider, payoff diagram)
-  rendering the `HedgeProposal` from `feature: propose`.
 
 ## Notes
 

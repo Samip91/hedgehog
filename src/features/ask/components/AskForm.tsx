@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRequestHedge } from '../hooks/useRequestHedge'
 import { ASK_PLACEHOLDER, EXAMPLE_CHIPS } from '../constants'
+import { ProposalResult } from '@/features/hedge'
 
 const STAGES = ['Understanding your risk…', 'Searching live markets…'] as const
 
@@ -53,17 +54,7 @@ export function AskForm() {
         {isPending ? STAGES[0] : 'Find my hedge'}
       </button>
 
-      {/* Scaffold state — the pipeline itself lands via the /feature workflow. */}
-      {data && !data.ok && (
-        <p className="mt-4 text-center text-sm text-amber-600 dark:text-amber-400">
-          {data.error.message}
-        </p>
-      )}
-      {error && (
-        <p className="mt-4 text-center text-sm text-red-600 dark:text-red-400">
-          Something went wrong. Please try again.
-        </p>
-      )}
+      <ProposalResult isPending={isPending} data={data} error={error} />
     </div>
   )
 }
