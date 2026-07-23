@@ -2,6 +2,17 @@
 
 Newest first.
 
+- **`feature: rerank`** — LLM rerank (large model, `LLM_RERANK_MODEL`) over the top-15
+  `Candidate[]` → up to 3 `RankedMatch` (correct YES/NO `side`, `relevance`
+  high/partial/weak, one-sentence reasoning); subset-only mapping, one
+  retry-on-invalid, injection-safe two-role prompt, `[]`-only degraded fallback
+  (guardrail). Headline: extracted the shared `nim-chat.ts` client out of `parse.ts`
+  (ADR 004) — behavior-preserving, `parse.test.ts` green unmodified. Merged to
+  `develop` via **PR #6** (`0977ecd`). Reviewer APPROVED (1 round + a missing-fixture
+  loud-error fix), full offline gate green (typecheck · lint · test 169/169 · evals:
+  parse 100%, retrieval recall@15 100%, rerank 100% · build w/
+  `SKIP_ENV_VALIDATION=1`).
+
 - **`feature: retrieval`** — `embedText` (NIM query embedding) + `retrieveCandidates`:
   hard filters → hybrid score (`0.60·cosine + 0.25·keyword + 0.15·liquidity`) →
   cross-provider dedupe → top-15 `Candidate[]`; pgvector HNSW cosine top-50 via typed
