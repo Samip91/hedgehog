@@ -15,8 +15,10 @@ import { PayoffDiagram } from './PayoffDiagram'
 import { MatchSummary } from './MatchSummary'
 import { PayoffCallouts } from './PayoffCallouts'
 import { AlternativesList } from './AlternativesList'
+import { SaveHedgeButton } from './SaveHedgeButton'
 
 export interface BestMatchSizedProps {
+  readonly prompt: string
   readonly spec: HedgeSpec
   readonly best: HedgeMatch
   readonly alternatives: readonly HedgeMatch[]
@@ -29,6 +31,7 @@ export interface BestMatchSizedProps {
  * deterministically identical — no drift, no separate "server" render path).
  */
 export function BestMatchSized({
+  prompt,
   spec,
   best,
   alternatives,
@@ -67,6 +70,15 @@ export function BestMatchSized({
 
         <div className="mt-4">
           <PayoffDiagram data={chartData} />
+        </div>
+
+        <div className="mt-4">
+          <SaveHedgeButton
+            prompt={prompt}
+            spec={spec}
+            best={best}
+            stakeUsd={stakeUsd}
+          />
         </div>
       </div>
 

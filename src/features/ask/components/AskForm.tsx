@@ -9,7 +9,7 @@ const STAGES = ['Understanding your risk…', 'Searching live markets…'] as co
 
 export function AskForm() {
   const [prompt, setPrompt] = useState('')
-  const { mutate, isPending, data, error } = useRequestHedge()
+  const { mutate, isPending, data, error, variables } = useRequestHedge()
 
   const disabled = isPending || prompt.trim().length === 0
 
@@ -54,7 +54,12 @@ export function AskForm() {
         {isPending ? STAGES[0] : 'Find my hedge'}
       </button>
 
-      <ProposalResult isPending={isPending} data={data} error={error} />
+      <ProposalResult
+        isPending={isPending}
+        data={data}
+        error={error}
+        prompt={variables ?? ''}
+      />
     </div>
   )
 }

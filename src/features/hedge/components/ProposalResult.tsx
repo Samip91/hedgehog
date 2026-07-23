@@ -12,6 +12,8 @@ export interface ProposalResultProps {
   readonly isPending: boolean
   readonly data: ApiResponse<HedgeProposal> | undefined
   readonly error: Error | null
+  /** The submitted risk text (mutation `variables`) — threaded to the save button. */
+  readonly prompt: string
 }
 
 /**
@@ -24,6 +26,7 @@ export function ProposalResult({
   isPending,
   data,
   error,
+  prompt,
 }: ProposalResultProps) {
   const view = selectView({ isPending, data, error })
 
@@ -71,6 +74,7 @@ export function ProposalResult({
         <div className="mt-4 flex flex-col gap-4">
           <ParsedRiskCard spec={view.spec} />
           <BestMatchSized
+            prompt={prompt}
             spec={view.spec}
             best={view.best}
             alternatives={view.alternatives}
@@ -82,7 +86,12 @@ export function ProposalResult({
       return (
         <div className="mt-4 flex flex-col gap-4">
           <ParsedRiskCard spec={view.spec} />
-          <BestMatchUnsized best={view.best} alternatives={view.alternatives} />
+          <BestMatchUnsized
+            prompt={prompt}
+            spec={view.spec}
+            best={view.best}
+            alternatives={view.alternatives}
+          />
         </div>
       )
 

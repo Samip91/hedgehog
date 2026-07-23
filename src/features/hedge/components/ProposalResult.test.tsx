@@ -1,8 +1,9 @@
-import { describe, expect, it } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { screen } from '@testing-library/react'
 import type { ApiResponse, HedgeSpec } from '@/shared/schemas'
 import type { HedgeMatch, HedgeProposal } from '@/shared/proposal'
 import { computeHedge } from '@/shared/hedgeMath'
+import { renderWithClient } from '@/test/renderWithClient'
 import { ProposalResult } from './ProposalResult'
 
 /**
@@ -10,7 +11,26 @@ import { ProposalResult } from './ProposalResult'
  * `selectView` directly, to exercise the wiring (AC 1, 2, 18–21): exactly
  * one state region renders, never a stale card during a new pending
  * mutation, and proposal text is rendered literally (no markup parsing).
+ *
+ * `saved-hedges` adds a required `prompt` prop (threaded to `SaveHedgeButton`
+ * in the sized/unsized branches) and mounts `useQueryClient()`/`useRouter()`
+ * deep in those trees — `next/navigation` is mocked and every render goes
+ * through `renderWithClient` (a real `QueryClientProvider`) so these
+ * ORIGINAL assertions keep running unmodified.
  */
+
+const mockPush = vi.fn()
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: mockPush }),
+}))
+
+vi.mock('@/features/hedges/api', () => ({
+  saveHedge: vi.fn(),
+}))
+
+beforeEach(() => {
+  vi.clearAllMocks()
+})
 
 function spec(overrides: Partial<HedgeSpec> = {}): HedgeSpec {
   return {
@@ -74,7 +94,14 @@ function okProposal(
 
 describe('ProposalResult — exactly one state (AC 1)', () => {
   it('pending: only the loading skeleton renders', () => {
-    render(<ProposalResult isPending data={undefined} error={null} />)
+    renderWithClient(
+      <ProposalResult
+        isPending
+        prompt="test prompt"
+        data={undefined}
+        error={null}
+      />
+    )
 
     expect(
       screen.getByRole('status', { name: /finding your hedge/i })
@@ -86,14 +113,26 @@ describe('ProposalResult — exactly one state (AC 1)', () => {
   it('no stale card left on screen when a new mutation goes pending (AC 1)', () => {
     const best = sizedMatch()
     const proposal = okProposal({ best })
-    const { rerender } = render(
-      <ProposalResult isPending={false} data={proposal} error={null} />
+    const { rerender } = renderWithClient(
+      <ProposalResult
+        isPending={false}
+        prompt="test prompt"
+        data={proposal}
+        error={null}
+      />
     )
     expect(screen.getByText(best.question)).toBeInTheDocument()
 
     // Simulate a resubmit: isPending flips true while `data` is still the
     // previous mutation's stale payload — `selectView` must ignore it.
-    rerender(<ProposalResult isPending data={proposal} error={null} />)
+    rerender(
+      <ProposalResult
+        isPending
+        prompt="test prompt"
+        data={proposal}
+        error={null}
+      />
+    )
 
     expect(
       screen.getByRole('status', { name: /finding your hedge/i })
@@ -103,9 +142,10 @@ describe('ProposalResult — exactly one state (AC 1)', () => {
   })
 
   it('!data.ok → amber message only, no proposal card (AC 20)', () => {
-    render(
+    renderWithClient(
       <ProposalResult
         isPending={false}
+        prompt="test prompt"
         data={{
           ok: false,
           error: { code: 'BAD', message: 'Please rephrase.' },
@@ -121,9 +161,10 @@ describe('ProposalResult — exactly one state (AC 1)', () => {
   })
 
   it('a network/mutation error → red message only (AC 21)', () => {
-    render(
+    renderWithClient(
       <ProposalResult
         isPending={false}
+        prompt="test prompt"
         data={undefined}
         error={new Error('boom')}
       />
@@ -136,9 +177,10 @@ describe('ProposalResult — exactly one state (AC 1)', () => {
 
   it('data.ok + sized best → parsed-risk card + best-match card, nothing else', () => {
     const best = sizedMatch()
-    render(
+    renderWithClient(
       <ProposalResult
         isPending={false}
+        prompt="test prompt"
         data={okProposal({ best })}
         error={null}
       />
@@ -151,9 +193,10 @@ describe('ProposalResult — exactly one state (AC 1)', () => {
   })
 
   it('best === null → parsed-risk card + "No matching market found" (distinct from error, AC 18)', () => {
-    render(
+    renderWithClient(
       <ProposalResult
         isPending={false}
+        prompt="test prompt"
         data={okProposal({ best: null, alternatives: [] })}
         error={null}
       />
@@ -170,9 +213,10 @@ describe('ProposalResult — exactly one state (AC 1)', () => {
 describe('ProposalResult — proposal text renders literally, no markup parsing (AC 2)', () => {
   it('a reasoning string containing markup-ish characters shows as literal text', () => {
     const markupish = '<b>bold</b> & "quotes" <script>alert(1)</script>'
-    const { container } = render(
+    const { container } = renderWithClient(
       <ProposalResult
         isPending={false}
+        prompt="test prompt"
         data={okProposal({ best: sizedMatch({ reasoning: markupish }) })}
         error={null}
       />
@@ -187,9 +231,10 @@ describe('ProposalResult — proposal text renders literally, no markup parsing 
 
   it('spec.clarificationNeeded with markup-ish characters shows as literal text', () => {
     const markupish = 'Confirm: <img src=x onerror=alert(1)>'
-    const { container } = render(
+    const { container } = renderWithClient(
       <ProposalResult
         isPending={false}
+        prompt="test prompt"
         data={okProposal({ spec: spec({ clarificationNeeded: markupish }) })}
         error={null}
       />
