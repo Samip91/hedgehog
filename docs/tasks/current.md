@@ -5,17 +5,18 @@
 
 ## In progress
 
-- `feature: ui-ask-proposal` — Proposal screen (parsed-risk card, best-match
-  sized/unsized cards, native stake slider re-running client-side `computeHedge`,
-  Recharts 2-outcome payoff diagram, compact alternatives, no-hedge/error states)
-  rendering the `HedgeProposal` inline from `feature: propose`. First **frontend**
-  slice — also stood up the UI test infra (Vitest jsdom project + Testing Library,
-  isolated from the 206 backend node tests — ADR 006) + first Playwright e2e.
-  Branch `feature/ui-ask-proposal`. Code complete, reviewer **APPROVED (1 round)**,
-  full offline gate green (typecheck · lint · test 269/269 · evals · build w/
+- `feature: saved-hedges` — anon httpOnly-cookie identity, idempotent save
+  (`POST /api/hedges`, client-uuid upsert, 403 on foreign re-save), list
+  (`GET /api/hedges`) + detail (`GET /api/hedges/[id]`, 404 no-existence-leak) +
+  DELETE, and **lazy on-read settlement** (pure `settle()` off DB `MarketSnapshot` —
+  RESOLVED win/loss + OPEN mark-to-market; ADR 007). UI: a "Save this hedge" button
+  on the proposal (navigate to `/hedge/[id]`), the `/hedges` list + `/hedge/[id]`
+  detail pages, confirm-delete. Backend + frontend built in parallel. Branch
+  `feature/saved-hedges`. Code complete, reviewer **APPROVED (1 round)**, full
+  offline gate green (typecheck · lint · test 344/344 · evals · build w/
   `SKIP_ENV_VALIDATION=1`). **Not merged** — run `/ship` (PR to `develop`, no AI
-  attribution). Deferred: slider/diagram on alternatives; live price refresh; a
-  live-pipeline e2e (the smoke stubs `/api/hedge`).
+  attribution). Settlement uses last-synced DB prices (may be stale); a fresh live
+  price is deferred to `feature: live-price`. Integration pending (DB unprovisioned).
 
 - `feature: providers-day1` — Kalshi + Polymarket clients + `http.ts` (retry +
   breaker) + normalizers, with fixtures and tests. Code complete + reviewed;

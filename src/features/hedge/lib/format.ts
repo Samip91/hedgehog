@@ -2,8 +2,16 @@
  * Pure, `Intl`-backed display formatters for the proposal screen. No ad-hoc
  * `toFixed`/string interpolation belongs in JSX — everything routes through
  * here so number/date/null copy stays consistent and unit-testable.
+ *
+ * `formatUsd`/`formatPrice` live in `@/shared/format` (no `HedgeMatch`
+ * dependency, so the `hedges` slice can use them without reaching into this
+ * one) and are re-exported here so this module stays the single import path
+ * for everything on the proposal screen.
  */
 import type { HedgeMatch } from '@/shared/proposal'
+import { formatUsd } from '@/shared/format'
+
+export { formatPrice, formatUsd } from '@/shared/format'
 
 export const NOT_SPECIFIED = 'not specified'
 export const NO_DEADLINE = 'no deadline'
@@ -12,12 +20,6 @@ const PROVIDER_LABEL: Record<HedgeMatch['provider'], string> = {
   kalshi: 'Kalshi',
   polymarket: 'Polymarket',
 }
-
-const usdFormatter = new Intl.NumberFormat('en-US', {
-  style: 'currency',
-  currency: 'USD',
-  maximumFractionDigits: 2,
-})
 
 const dateFormatter = new Intl.DateTimeFormat('en-US', {
   month: 'short',
@@ -28,19 +30,9 @@ const dateFormatter = new Intl.DateTimeFormat('en-US', {
   timeZone: 'UTC',
 })
 
-/** `1234.5` → `"$1,234.50"`. */
-export function formatUsd(value: number): string {
-  return usdFormatter.format(value)
-}
-
 /** `spec.exposureUsd`: currency, or the "not specified" null copy. */
 export function formatExposureUsd(value: number | null): string {
   return value === null ? NOT_SPECIFIED : formatUsd(value)
-}
-
-/** A market side's price in (0, 1) → cents, e.g. `0.24` → `"24¢"`. */
-export function formatPrice(price: number): string {
-  return `${Math.round(price * 100)}¢`
 }
 
 /** `HedgeMatch.provider` → its display label — shared by every match card. */

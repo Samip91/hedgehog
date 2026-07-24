@@ -1,8 +1,9 @@
-import { describe, expect, it } from 'vitest'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { fireEvent, screen } from '@testing-library/react'
 import type { HedgeMatch } from '@/shared/proposal'
 import type { HedgeSpec } from '@/shared/schemas'
 import { computeHedge } from '@/shared/hedgeMath'
+import { renderWithClient } from '@/test/renderWithClient'
 import { formatUsd } from '../lib/format'
 import { BestMatchSized } from './BestMatchSized'
 
@@ -15,7 +16,25 @@ import { BestMatchSized } from './BestMatchSized'
  * value next to the `<dt>` label, and the slider's `valueText` readout), so
  * assertions here read a specific node's `textContent` off its label sibling
  * rather than a global `getByText`, which would be ambiguous.
+ *
+ * `saved-hedges` mounts `SaveHedgeButton` (`useRouter` + `useQueryClient`)
+ * below the payoff diagram — `next/navigation` is mocked and every render
+ * goes through `renderWithClient` (a real `QueryClientProvider`) so these
+ * ORIGINAL payoff/slider assertions keep running unmodified.
  */
+
+const mockPush = vi.fn()
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: mockPush }),
+}))
+
+vi.mock('@/features/hedges/api', () => ({
+  saveHedge: vi.fn(),
+}))
+
+beforeEach(() => {
+  vi.clearAllMocks()
+})
 
 function spec(overrides: Partial<HedgeSpec> = {}): HedgeSpec {
   return {
@@ -75,8 +94,13 @@ describe('BestMatchSized — first paint = server numbers, no recompute drift (A
   it('renders stakeUsd/payoutIfWin/netIfBadOutcome/netIfGoodOutcome/coveragePct exactly as sent', () => {
     const s = spec()
     const best = match({ stakeUsd: 300, price: 0.4 })
-    const { container } = render(
-      <BestMatchSized spec={s} best={best} alternatives={[]} />
+    const { container } = renderWithClient(
+      <BestMatchSized
+        prompt="test prompt"
+        spec={s}
+        best={best}
+        alternatives={[]}
+      />
     )
 
     expect(textAfterLabel(container, 'Stake')).toBe(
@@ -102,7 +126,14 @@ describe('BestMatchSized — first paint = server numbers, no recompute drift (A
   it('provider, question, side, and price also render (AC 7)', () => {
     const s = spec()
     const best = match({ provider: 'kalshi', side: 'YES', price: 0.4 })
-    render(<BestMatchSized spec={s} best={best} alternatives={[]} />)
+    renderWithClient(
+      <BestMatchSized
+        prompt="test prompt"
+        spec={s}
+        best={best}
+        alternatives={[]}
+      />
+    )
 
     expect(screen.getByText('Kalshi')).toBeInTheDocument()
     expect(screen.getByText(best.question)).toBeInTheDocument()
@@ -114,7 +145,14 @@ describe('BestMatchSized — slider drives computeHedge (AC 8, 9)', () => {
   it('the slider initial value equals best.stakeUsd', () => {
     const s = spec()
     const best = match({ stakeUsd: 300 })
-    render(<BestMatchSized spec={s} best={best} alternatives={[]} />)
+    renderWithClient(
+      <BestMatchSized
+        prompt="test prompt"
+        spec={s}
+        best={best}
+        alternatives={[]}
+      />
+    )
 
     const slider = document.querySelector<HTMLInputElement>('#stake-sized')
     expect(slider).not.toBeNull()
@@ -124,8 +162,13 @@ describe('BestMatchSized — slider drives computeHedge (AC 8, 9)', () => {
   it('dragging the slider updates the displayed payoff to match stakeToPayoff at the new stake', () => {
     const s = spec({ exposureUsd: 500 })
     const best = match({ stakeUsd: 300, price: 0.4 })
-    const { container } = render(
-      <BestMatchSized spec={s} best={best} alternatives={[]} />
+    const { container } = renderWithClient(
+      <BestMatchSized
+        prompt="test prompt"
+        spec={s}
+        best={best}
+        alternatives={[]}
+      />
     )
 
     const slider = document.querySelector<HTMLInputElement>('#stake-sized')
@@ -160,8 +203,13 @@ describe('BestMatchSized — slider drives computeHedge (AC 8, 9)', () => {
   it('stakeUsd: 0 does not throw and renders the computeHedge(0,...) numbers', () => {
     const s = spec({ exposureUsd: 500 })
     const best = match({ stakeUsd: 300, price: 0.4 })
-    const { container } = render(
-      <BestMatchSized spec={s} best={best} alternatives={[]} />
+    const { container } = renderWithClient(
+      <BestMatchSized
+        prompt="test prompt"
+        spec={s}
+        best={best}
+        alternatives={[]}
+      />
     )
 
     const slider = document.querySelector<HTMLInputElement>('#stake-sized')
@@ -183,7 +231,14 @@ describe('BestMatchSized — PayoffDiagram does not remount on drag (AC 10)', ()
   it('the diagram container DOM node reference is stable before/after a drag', () => {
     const s = spec()
     const best = match({ stakeUsd: 300, price: 0.4 })
-    render(<BestMatchSized spec={s} best={best} alternatives={[]} />)
+    renderWithClient(
+      <BestMatchSized
+        prompt="test prompt"
+        spec={s}
+        best={best}
+        alternatives={[]}
+      />
+    )
 
     const diagramBefore = screen.getByRole('img', {
       name: /payoff by outcome/i,
@@ -203,7 +258,14 @@ describe('BestMatchSized — alternatives render below the best match (AC 11)', 
     const s = spec()
     const best = match()
     const alt = match({ externalId: 'ALT-1', question: 'Alt question?' })
-    render(<BestMatchSized spec={s} best={best} alternatives={[alt]} />)
+    renderWithClient(
+      <BestMatchSized
+        prompt="test prompt"
+        spec={s}
+        best={best}
+        alternatives={[alt]}
+      />
+    )
 
     expect(screen.getByText('Alt question?')).toBeInTheDocument()
   })
@@ -211,7 +273,14 @@ describe('BestMatchSized — alternatives render below the best match (AC 11)', 
   it('renders no alternatives section when alternatives is empty (AC 17)', () => {
     const s = spec()
     const best = match()
-    render(<BestMatchSized spec={s} best={best} alternatives={[]} />)
+    renderWithClient(
+      <BestMatchSized
+        prompt="test prompt"
+        spec={s}
+        best={best}
+        alternatives={[]}
+      />
+    )
 
     expect(screen.queryByText(/other markets/i)).not.toBeInTheDocument()
   })

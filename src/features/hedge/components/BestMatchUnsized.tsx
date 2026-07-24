@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import type { HedgeMatch } from '@/shared/proposal'
+import type { HedgeSpec } from '@/shared/schemas'
 import { suggestedStake } from '@/shared/hedgeMath'
 import {
   clampStake,
@@ -15,8 +16,11 @@ import { PayoffDiagram } from './PayoffDiagram'
 import { MatchSummary } from './MatchSummary'
 import { PayoffCallouts } from './PayoffCallouts'
 import { AlternativesList } from './AlternativesList'
+import { SaveHedgeButton } from './SaveHedgeButton'
 
 export interface BestMatchUnsizedProps {
+  readonly prompt: string
+  readonly spec: HedgeSpec
   readonly best: HedgeMatch
   readonly alternatives: readonly HedgeMatch[]
 }
@@ -35,6 +39,8 @@ function parseExposure(raw: string): number | null {
  * drives the exact same `computeHedge` path as the sized card.
  */
 export function BestMatchUnsized({
+  prompt,
+  spec,
   best,
   alternatives,
 }: BestMatchUnsizedProps) {
@@ -126,6 +132,15 @@ export function BestMatchUnsized({
 
               <div className="mt-4">
                 <PayoffDiagram data={chartData} />
+              </div>
+
+              <div className="mt-4">
+                <SaveHedgeButton
+                  prompt={prompt}
+                  spec={spec}
+                  best={best}
+                  stakeUsd={stakeUsd}
+                />
               </div>
             </>
           )}

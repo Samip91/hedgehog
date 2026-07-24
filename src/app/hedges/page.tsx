@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { SavedHedgesList } from '@/features/hedges'
 
 export default function HedgesPage() {
   return (
@@ -13,22 +14,7 @@ export default function HedgesPage() {
         </Link>
       </div>
 
-      {/* Empty state — saved hedges + live P&L land via feature: saved-hedges. */}
-      <div className="flex flex-1 flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-black/10 py-20 text-center dark:border-white/15">
-        <div className="text-4xl" aria-hidden>
-          🦔
-        </div>
-        <p className="max-w-xs text-sm text-zinc-600 dark:text-zinc-400">
-          No hedges yet. Describe a risk and save your first hedge to track its
-          simulated P&amp;L here.
-        </p>
-        <Link
-          href="/"
-          className="mt-2 rounded-full bg-emerald-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-emerald-700"
-        >
-          Find a hedge
-        </Link>
-      </div>
+      <SavedHedgesList />
     </main>
   )
 }

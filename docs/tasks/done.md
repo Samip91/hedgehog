@@ -2,6 +2,16 @@
 
 Newest first.
 
+- **`feature: ui-ask-proposal`** — the proposal screen: parsed-risk card, best-match
+  sized/unsized cards, a native stake slider re-running client-side `computeHedge`
+  (shared pure math, no drift), a Recharts 2-outcome payoff diagram, compact
+  alternatives, honest no-hedge + error states — rendering the `HedgeProposal` inline.
+  First **frontend** slice; stood up the UI test infra (Vitest jsdom project +
+  Testing Library, isolated from the backend node tests — ADR 006) + first Playwright
+  smoke e2e. Retired the stale `hedge/types.ts`. Merged to `develop` via **PR #8**
+  (`4830455`). Reviewer APPROVED. Gate green (test 269/269). Deferred: slider/diagram
+  on alternatives; live price refresh; a live-pipeline e2e.
+
 - **`feature: propose`** — wires the 4-stage pipeline (`parse → retrieve → rerank →
 buildProposal`) behind `POST /api/hedge`: sized `HedgeProposal` (payoff math via
   `hedgeMath`, invalid-price matches dropped, `.finite()` schema backstop), a narrow
