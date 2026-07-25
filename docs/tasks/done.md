@@ -2,6 +2,16 @@
 
 Newest first.
 
+- **`feature: saved-hedges`** — anon httpOnly-cookie identity; idempotent
+  `POST /api/hedges` (client-uuid upsert, 403 on foreign re-save); `GET /api/hedges`
+  list + `GET /api/hedges/[id]` detail (404 no-existence-leak) + DELETE; pure lazy
+  on-read `settle()` off DB `MarketSnapshot` (RESOLVED win/loss + OPEN mark-to-market;
+  ADR 007). UI: save button on the proposal (navigates to `/hedge/[id]`), the
+  `/hedges` list + `/hedge/[id]` detail pages, confirm-delete. Backend + frontend
+  built in parallel. Merged to `develop` via **PR #9** (`abac0b1`). Reviewer APPROVED.
+  Gate green (test 344/344). Settlement uses last-synced DB prices (fresh live price
+  deferred to `feature: live-price`); DB integration pending.
+
 - **`feature: ui-ask-proposal`** — the proposal screen: parsed-risk card, best-match
   sized/unsized cards, a native stake slider re-running client-side `computeHedge`
   (shared pure math, no drift), a Recharts 2-outcome payoff diagram, compact

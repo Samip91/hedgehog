@@ -5,18 +5,22 @@
 
 ## In progress
 
-- `feature: saved-hedges` — anon httpOnly-cookie identity, idempotent save
-  (`POST /api/hedges`, client-uuid upsert, 403 on foreign re-save), list
-  (`GET /api/hedges`) + detail (`GET /api/hedges/[id]`, 404 no-existence-leak) +
-  DELETE, and **lazy on-read settlement** (pure `settle()` off DB `MarketSnapshot` —
-  RESOLVED win/loss + OPEN mark-to-market; ADR 007). UI: a "Save this hedge" button
-  on the proposal (navigate to `/hedge/[id]`), the `/hedges` list + `/hedge/[id]`
-  detail pages, confirm-delete. Backend + frontend built in parallel. Branch
-  `feature/saved-hedges`. Code complete, reviewer **APPROVED (1 round)**, full
-  offline gate green (typecheck · lint · test 344/344 · evals · build w/
-  `SKIP_ENV_VALIDATION=1`). **Not merged** — run `/ship` (PR to `develop`, no AI
-  attribution). Settlement uses last-synced DB prices (may be stale); a fresh live
-  price is deferred to `feature: live-price`. Integration pending (DB unprovisioned).
+- `feature: hardening` — production-safety pass, four concerns: (1) generalized
+  per-IP rate limiter (`checkRateLimit(bucket,ip,limit,window)`) applied to `hedges`
+  GET/POST, `hedges/[id]` GET/DELETE, `health` (fail-open, `Retry-After`; `/api/hedge`
+  behavior byte-identical; cron stays bearer-authed); (2) global security headers +
+  a pragmatic static CSP via `next.config.ts` (Recharts-safe, dev-gated
+  `unsafe-eval`/`ws:`); (3) a small structured JSON logger (`src/server/log.ts`,
+  `LOG_LEVEL`, redacts cookie/creds/prompt) wired into 500 paths + degraded signals,
+  no response change; (4) a hand-rolled PWA service worker (offline app-shell,
+  network-first pages/API, cache-first static, versioned + prod-only) + generated
+  maskable/apple-touch/favicon icons. ADR 008. Branch `feature/hardening`. Code
+  complete, reviewer **APPROVED (1 round)**, full offline gate green (typecheck · lint ·
+  test 429/429 · evals · build w/ `SKIP_ENV_VALIDATION=1`). **Not merged** — run
+  `/ship` (PR to `develop`, no AI attribution). Follow-ups (deferred): nonce-based CSP;
+  `@upstash/ratelimit` sliding window; map infra errors to codes vs logging raw
+  `.message`; the SW offline + installability (AC 18/22) verified via the prod-only
+  `e2e/offline.spec.ts` + a manual DevTools check (can't run headless in sandbox).
 
 - `feature: providers-day1` — Kalshi + Polymarket clients + `http.ts` (retry +
   breaker) + normalizers, with fixtures and tests. Code complete + reviewed;

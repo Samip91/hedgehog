@@ -38,6 +38,20 @@ const schema = z.object({
   // Public
   NEXT_PUBLIC_APP_URL: z.string().min(1).default('http://localhost:3000'),
 
+  // Rate limits (spec docs/features/hardening/spec.md AC 1-9) — per-bucket
+  // limit/window, all env-tunable with sane defaults.
+  RL_HEDGES_SAVE_LIMIT: z.coerce.number().int().positive().default(20),
+  RL_HEDGES_SAVE_WINDOW: z.coerce.number().int().positive().default(600),
+  RL_HEDGES_READ_LIMIT: z.coerce.number().int().positive().default(60),
+  RL_HEDGES_READ_WINDOW: z.coerce.number().int().positive().default(60),
+  RL_HEDGES_DELETE_LIMIT: z.coerce.number().int().positive().default(30),
+  RL_HEDGES_DELETE_WINDOW: z.coerce.number().int().positive().default(60),
+  RL_HEALTH_LIMIT: z.coerce.number().int().positive().default(120),
+  RL_HEALTH_WINDOW: z.coerce.number().int().positive().default(60),
+
+  // Structured logging (docs/features/hardening/spec.md AC 14-17)
+  LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
+
   NODE_ENV: z
     .enum(['development', 'test', 'production'])
     .default('development'),

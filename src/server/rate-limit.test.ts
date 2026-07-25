@@ -25,6 +25,7 @@ vi.mock('@/server/cache', () => ({
 
 import {
   checkHedgeRateLimit,
+  checkRateLimit,
   clientIp,
   HEDGE_RATE_LIMIT,
   HEDGE_RATE_WINDOW_SECONDS,
@@ -96,6 +97,104 @@ describe('checkHedgeRateLimit — fail-open', () => {
       ok: true,
       remaining: HEDGE_RATE_LIMIT,
     })
+  })
+})
+
+// ── hardening AC 1, 9 — generalized checkRateLimit(bucket, ip, limit, window) ─
+describe('checkRateLimit — arbitrary bucket (hardening AC 1, 9)', () => {
+  it('key shape is ratelimit:{bucket}:{ip} on the first request (redis.set NX EX window)', async () => {
+    mocks.set.mockResolvedValue('OK')
+
+    await checkRateLimit('hedges:read', '9.9.9.9', 60, 60)
+
+    expect(mocks.set).toHaveBeenCalledWith('ratelimit:hedges:read:9.9.9.9', 1, {
+      nx: true,
+      ex: 60,
+    })
+    expect(mocks.incr).not.toHaveBeenCalled()
+  })
+
+  it('different buckets for the same IP use independent keys', async () => {
+    mocks.set.mockResolvedValue('OK')
+
+    await checkRateLimit('health', '1.1.1.1', 120, 60)
+    await checkRateLimit('hedges:save', '1.1.1.1', 20, 600)
+
+    expect(mocks.set).toHaveBeenNthCalledWith(
+      1,
+      'ratelimit:health:1.1.1.1',
+      1,
+      {
+        nx: true,
+        ex: 60,
+      }
+    )
+    expect(mocks.set).toHaveBeenNthCalledWith(
+      2,
+      'ratelimit:hedges:save:1.1.1.1',
+      1,
+      { nx: true, ex: 600 }
+    )
+  })
+
+  it('allows while count <= limit (count === limit)', async () => {
+    mocks.set.mockResolvedValue(null)
+    mocks.incr.mockResolvedValue(60)
+
+    const result = await checkRateLimit('hedges:read', '9.9.9.9', 60, 60)
+
+    expect(result).toEqual({ ok: true, remaining: 0 })
+    expect(mocks.incr).toHaveBeenCalledWith('ratelimit:hedges:read:9.9.9.9')
+  })
+
+  it('blocks when count > limit', async () => {
+    mocks.set.mockResolvedValue(null)
+    mocks.incr.mockResolvedValue(61)
+
+    const result = await checkRateLimit('hedges:read', '9.9.9.9', 60, 60)
+
+    expect(result).toEqual({ ok: false, remaining: 0 })
+  })
+
+  it('fails open ({ok:true, remaining:limit}) when redis.set rejects', async () => {
+    mocks.set.mockRejectedValue(new Error('ECONNRESET'))
+
+    await expect(
+      checkRateLimit('hedges:save', '9.9.9.9', 20, 600)
+    ).resolves.toEqual({ ok: true, remaining: 20 })
+  })
+
+  it('fails open when redis.set resolves null and the fallback redis.incr rejects', async () => {
+    mocks.set.mockResolvedValue(null)
+    mocks.incr.mockRejectedValue(new Error('ECONNRESET'))
+
+    await expect(
+      checkRateLimit('hedges:delete', '9.9.9.9', 30, 60)
+    ).resolves.toEqual({ ok: true, remaining: 30 })
+  })
+})
+
+// ── checkHedgeRateLimit stays a byte-identical wrapper post-generalization ──
+describe("checkHedgeRateLimit — still delegates to checkRateLimit('hedge', …) unchanged", () => {
+  it('first request: redis.set (NX) → OK → ok:true, remaining:9, same as before generalization', async () => {
+    mocks.set.mockResolvedValue('OK')
+
+    const result = await checkHedgeRateLimit('1.2.3.4')
+
+    expect(result).toEqual({ ok: true, remaining: 9 })
+    expect(mocks.set).toHaveBeenCalledWith('ratelimit:hedge:1.2.3.4', 1, {
+      nx: true,
+      ex: HEDGE_RATE_WINDOW_SECONDS,
+    })
+  })
+
+  it('11th request is blocked, matching the pre-generalization behavior', async () => {
+    mocks.set.mockResolvedValue(null)
+    mocks.incr.mockResolvedValue(11)
+
+    const result = await checkHedgeRateLimit('1.2.3.4')
+
+    expect(result.ok).toBe(false)
   })
 })
 

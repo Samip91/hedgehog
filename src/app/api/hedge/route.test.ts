@@ -20,6 +20,7 @@ const mocks = vi.hoisted(() => ({
   buildProposal: vi.fn(),
   checkHedgeRateLimit: vi.fn(),
   clientIp: vi.fn(),
+  loggerError: vi.fn(),
 }))
 
 vi.mock('@/server/pipeline/parse', () => ({ parseRisk: mocks.parseRisk }))
@@ -33,6 +34,20 @@ vi.mock('@/server/pipeline/propose', () => ({
 vi.mock('@/server/rate-limit', () => ({
   checkHedgeRateLimit: mocks.checkHedgeRateLimit,
   clientIp: mocks.clientIp,
+  HEDGE_RATE_WINDOW_SECONDS: 600,
+}))
+// hardening: route.ts now imports the structured logger on its catch→500
+// path (spec docs/features/hardening/spec.md AC 15). `@/server/log` does
+// `import 'server-only'`, which throws when loaded unmocked outside a Server
+// Component — mock it out (same idiom as the other route suites).
+vi.mock('@/server/log', () => ({
+  logger: {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: mocks.loggerError,
+  },
+  newErrorId: () => 'test-err-id',
 }))
 
 import { POST } from './route'
@@ -213,6 +228,15 @@ describe('POST /api/hedge — 429 rate-limited', () => {
 
     expect(res.status).toBe(429)
   })
+
+  // hardening AC 7 — every 429 includes a Retry-After header.
+  it('includes a Retry-After header matching HEDGE_RATE_WINDOW_SECONDS', async () => {
+    mocks.checkHedgeRateLimit.mockResolvedValue({ ok: false, remaining: 0 })
+
+    const res = await POST(postReq({ prompt: 'Will it rain?' }))
+
+    expect(res.headers.get('Retry-After')).toBe('600')
+  })
 })
 
 // ── AC 7 — 500 on a propagated infra failure ────────────────────────────────
@@ -235,6 +259,31 @@ describe('POST /api/hedge — 500 on propagated infra failure', () => {
     expect(body).not.toHaveProperty('data')
     expect(mocks.rerank).not.toHaveBeenCalled()
     expect(mocks.buildProposal).not.toHaveBeenCalled()
+  })
+
+  // hardening AC 15 — the catch→500 logs a structured error, response unchanged.
+  it('logs a structured error with an errorId; the response body/status is unchanged', async () => {
+    mocks.parseRisk.mockResolvedValue(fakeSpec())
+    mocks.retrieveCandidates.mockRejectedValue(new Error('connection refused'))
+
+    const res = await POST(postReq({ prompt: 'Will it rain?' }))
+
+    expect(res.status).toBe(500)
+    await expect(res.json()).resolves.toEqual({
+      ok: false,
+      error: {
+        code: 'PIPELINE_ERROR',
+        message: 'Could not build a hedge right now.',
+      },
+    })
+    expect(mocks.loggerError).toHaveBeenCalledWith(
+      'POST /api/hedge failed',
+      expect.objectContaining({
+        route: 'POST /api/hedge',
+        errorId: 'test-err-id',
+        err: 'connection refused',
+      })
+    )
   })
 })
 

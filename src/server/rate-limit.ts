@@ -13,7 +13,8 @@ import { redis } from '@/server/cache'
 export const HEDGE_RATE_LIMIT = 10
 export const HEDGE_RATE_WINDOW_SECONDS = 600
 
-const keyFor = (ip: string): string => `ratelimit:hedge:${ip}`
+const keyFor = (bucket: string, ip: string): string =>
+  `ratelimit:${bucket}:${ip}`
 
 export interface RateLimitResult {
   readonly ok: boolean
@@ -37,30 +38,48 @@ export function clientIp(req: NextRequest): string {
 }
 
 /**
- * Fixed-window counter on `ratelimit:hedge:${ip}`. The first request in a
- * window is created atomically with its TTL via `SET key 1 NX EX 600`, so a
- * key with a value always has an expiry — there is no `INCR`-then-`EXPIRE`
+ * Fixed-window counter on `ratelimit:${bucket}:${ip}`. The first request in a
+ * window is created atomically with its TTL via `SET key 1 NX EX window`, so
+ * a key with a value always has an expiry — there is no `INCR`-then-`EXPIRE`
  * window where a crash could orphan an untimed counter and block the IP
- * forever. Subsequent requests `INCR`. Allowed while `count <= HEDGE_RATE_LIMIT`.
+ * forever. Subsequent requests `INCR`. Allowed while `count <= limit`.
+ * Fail-open on any Redis error (ADR 005): the limiter must not be the single
+ * point of failure for a rate-limited route.
  */
-export async function checkHedgeRateLimit(
-  ip: string
+export async function checkRateLimit(
+  bucket: string,
+  ip: string,
+  limit: number,
+  windowSeconds: number
 ): Promise<RateLimitResult> {
   try {
-    const key = keyFor(ip)
+    const key = keyFor(bucket, ip)
     // `SET … NX EX` returns 'OK' when it created the key (window start), else
     // null; only then do we INCR the existing counter. Value + TTL are set
     // together, so no untimed orphan is possible.
     const created = await redis.set(key, 1, {
       nx: true,
-      ex: HEDGE_RATE_WINDOW_SECONDS,
+      ex: windowSeconds,
     })
     const count = created ? 1 : await redis.incr(key)
     return {
-      ok: count <= HEDGE_RATE_LIMIT,
-      remaining: Math.max(0, HEDGE_RATE_LIMIT - count),
+      ok: count <= limit,
+      remaining: Math.max(0, limit - count),
     }
   } catch {
-    return { ok: true, remaining: HEDGE_RATE_LIMIT }
+    return { ok: true, remaining: limit }
   }
+}
+
+/** `/api/hedge`-only wrapper — preserves the original bucket key
+ * (`ratelimit:hedge:${ip}`) and 10/10min defaults. */
+export async function checkHedgeRateLimit(
+  ip: string
+): Promise<RateLimitResult> {
+  return checkRateLimit(
+    'hedge',
+    ip,
+    HEDGE_RATE_LIMIT,
+    HEDGE_RATE_WINDOW_SECONDS
+  )
 }
