@@ -21,6 +21,7 @@ import { embedBatch } from '@/server/pipeline/embed'
 import { providers } from '@/server/providers/registry'
 import { toProviderEnum } from '@/server/providers/provider-enum'
 import type { NormalizedMarket } from '@/server/providers/types'
+import { logger } from '@/server/log'
 
 export interface SyncResult {
   readonly fetched: number
@@ -275,6 +276,8 @@ export async function runSync(): Promise<SyncResult> {
   if (shouldWriteCatalog) {
     await writeHotCatalog(valid.map(toHotMarket), new Date())
   }
+
+  if (degraded.length) logger.warn('sync degraded', { degraded })
 
   return { fetched, upserted, embedded, degraded }
 }

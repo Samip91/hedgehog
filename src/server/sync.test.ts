@@ -20,6 +20,7 @@ const mocks = vi.hoisted(() => ({
   redisDel: vi.fn(),
   redisSet: vi.fn(),
   writeHotCatalog: vi.fn(),
+  loggerWarn: vi.fn(),
 }))
 
 vi.mock('@/server/providers/registry', () => ({
@@ -46,6 +47,19 @@ vi.mock('@/server/db', () => ({
 
 vi.mock('@/server/pipeline/embed', () => ({
   embedBatch: mocks.embedBatch,
+}))
+
+// hardening AC 16: sync.ts now logs a structured warn when `degraded` is
+// non-empty. `@/server/log` does `import 'server-only'` — mock it out so
+// `logger.warn` calls are assertable and stdout stays quiet during the run.
+vi.mock('@/server/log', () => ({
+  logger: {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: mocks.loggerWarn,
+    error: vi.fn(),
+  },
+  newErrorId: () => 'test-err-id',
 }))
 
 // cache.ts is `import 'server-only'` and constructs a real `Redis` client
@@ -473,5 +487,44 @@ describe('runSync — degradedKey set/cleared (AC 17)', () => {
 
     expect(mocks.redisDel).toHaveBeenCalledWith('degraded:kalshi')
     expect(mocks.redisSet).not.toHaveBeenCalledWith('degraded:kalshi', '1')
+  })
+})
+
+describe('runSync — logs a structured warn when degraded is non-empty (hardening AC 16)', () => {
+  beforeEach(resetDefaults)
+
+  it("a degraded provider → logger.warn('sync degraded', { degraded }) with the same array as the result", async () => {
+    mocks.kalshiFetch.mockRejectedValue(new Error('kalshi down'))
+    mocks.polyFetch.mockResolvedValue(polymarketMarkets)
+
+    const result = await runSync()
+
+    expect(mocks.loggerWarn).toHaveBeenCalledOnce()
+    expect(mocks.loggerWarn).toHaveBeenCalledWith('sync degraded', {
+      degraded: result.degraded,
+    })
+  })
+
+  it('degraded is [] (both providers healthy) → logger.warn is never called', async () => {
+    mocks.kalshiFetch.mockResolvedValue(kalshiMarkets)
+    mocks.polyFetch.mockResolvedValue(polymarketMarkets)
+
+    const result = await runSync()
+
+    expect(result.degraded).toEqual([])
+    expect(mocks.loggerWarn).not.toHaveBeenCalled()
+  })
+
+  it('an embedding failure alone still triggers the degraded warn', async () => {
+    mocks.kalshiFetch.mockResolvedValue(kalshiMarkets)
+    mocks.polyFetch.mockResolvedValue(polymarketMarkets)
+    mocks.embedBatch.mockRejectedValue(new Error('NIM down'))
+
+    const result = await runSync()
+
+    expect(result.degraded).toContain('embedding')
+    expect(mocks.loggerWarn).toHaveBeenCalledWith('sync degraded', {
+      degraded: result.degraded,
+    })
   })
 })

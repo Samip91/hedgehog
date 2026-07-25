@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { env } from '@/config/env'
 import { err, ok } from '@/shared/schemas'
 import { runSync } from '@/server/sync'
+import { logger, newErrorId } from '@/server/log'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -23,6 +24,12 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(ok(result))
   } catch (e) {
     const message = e instanceof Error ? e.message : 'sync failed'
+    const errorId = newErrorId()
+    logger.error('GET /api/cron/sync failed', {
+      route: 'GET /api/cron/sync',
+      errorId,
+      err: message,
+    })
     return NextResponse.json(err('SYNC_FAILED', message), { status: 500 })
   }
 }

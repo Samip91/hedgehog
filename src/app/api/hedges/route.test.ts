@@ -19,6 +19,10 @@ const mocks = vi.hoisted(() => ({
   findManySavedHedge: vi.fn(),
   findUniqueMarketSnapshot: vi.fn(),
   findManyMarketSnapshot: vi.fn(),
+  checkRateLimit: vi.fn(),
+  clientIp: vi.fn(),
+  loggerError: vi.fn(),
+  loggerWarn: vi.fn(),
 }))
 
 vi.mock('server-only', () => ({}))
@@ -41,6 +45,47 @@ vi.mock('@/server/db', () => ({
       findMany: mocks.findManyMarketSnapshot,
     },
   },
+}))
+
+// hardening: the route now reads `@/config/env` directly (for the RL_* rate
+// limit tunables) — mock it out (same idiom as `retrieve.test.ts`) so the
+// real module's `import 'server-only'` + `process.env` validation never runs
+// under vitest's plain `node` environment with no real env vars set.
+vi.mock('@/config/env', () => ({
+  env: {
+    RL_HEDGES_SAVE_LIMIT: 20,
+    RL_HEDGES_SAVE_WINDOW: 600,
+    RL_HEDGES_READ_LIMIT: 60,
+    RL_HEDGES_READ_WINDOW: 60,
+    RL_HEDGES_DELETE_LIMIT: 30,
+    RL_HEDGES_DELETE_WINDOW: 60,
+    RL_HEALTH_LIMIT: 120,
+    RL_HEALTH_WINDOW: 60,
+    LOG_LEVEL: 'info',
+  },
+}))
+
+// `@/server/log` does `import 'server-only'` — mock it out so it never loads
+// unmocked, and so `logger.error`/`logger.warn` calls are assertable.
+vi.mock('@/server/log', () => ({
+  logger: {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: mocks.loggerWarn,
+    error: mocks.loggerError,
+  },
+  newErrorId: () => 'test-err-id',
+}))
+
+// hardening AC 2, 3: both handlers now rate-limit first. Default the mock to
+// "allowed" so every existing assertion below is unaffected; individual
+// tests override to exercise the 429 path.
+vi.mock('@/server/rate-limit', () => ({
+  checkRateLimit: mocks.checkRateLimit,
+  checkHedgeRateLimit: vi.fn(async () => ({ ok: true, remaining: 9 })),
+  clientIp: mocks.clientIp,
+  HEDGE_RATE_LIMIT: 10,
+  HEDGE_RATE_WINDOW_SECONDS: 600,
 }))
 
 import { GET, POST } from './route'
@@ -126,6 +171,8 @@ beforeEach(() => {
   mocks.findManySavedHedge.mockResolvedValue([])
   mocks.findUniqueMarketSnapshot.mockResolvedValue(null)
   mocks.findManyMarketSnapshot.mockResolvedValue([])
+  mocks.checkRateLimit.mockResolvedValue({ ok: true, remaining: 19 })
+  mocks.clientIp.mockReturnValue('1.2.3.4')
 })
 
 // ── AC 1 — no cookie → mint + set on response ───────────────────────────────
@@ -289,5 +336,140 @@ describe('GET /api/hedges — list (AC 10, 11, 12)', () => {
     })
     // Batched (not N+1): exactly one snapshot findMany call for the whole list.
     expect(mocks.findManyMarketSnapshot).toHaveBeenCalledOnce()
+  })
+})
+
+// ── hardening AC 2, 8 — POST rate limited ───────────────────────────────────
+describe('POST /api/hedges — rate limited (hardening AC 2, 8)', () => {
+  it('checkRateLimit ok:false for hedges:save → 429 RATE_LIMITED with Retry-After, before any DB write', async () => {
+    setCookie('anon-A')
+    mocks.checkRateLimit.mockResolvedValue({ ok: false, remaining: 0 })
+
+    const res = await POST(postReq(validBody()))
+
+    expect(res.status).toBe(429)
+    expect(res.headers.get('Retry-After')).toBe('600')
+    await expect(res.json()).resolves.toEqual({
+      ok: false,
+      error: {
+        code: 'RATE_LIMITED',
+        message: 'Too many requests. Try again shortly.',
+      },
+    })
+    expect(mocks.findUniqueSavedHedge).not.toHaveBeenCalled()
+    expect(mocks.upsertSavedHedge).not.toHaveBeenCalled()
+  })
+
+  it('is checked against the hedges:save bucket with the configured limit/window', async () => {
+    mocks.checkRateLimit.mockResolvedValue({ ok: true, remaining: 19 })
+
+    await POST(postReq(validBody()))
+
+    expect(mocks.checkRateLimit).toHaveBeenCalledWith(
+      'hedges:save',
+      '1.2.3.4',
+      20,
+      600
+    )
+  })
+
+  it('checkRateLimit ok:true (fail-open / allowed) → proceeds to a normal 200', async () => {
+    mocks.checkRateLimit.mockResolvedValue({ ok: true, remaining: 19 })
+
+    const res = await POST(postReq(validBody()))
+
+    expect(res.status).toBe(200)
+    expect(mocks.upsertSavedHedge).toHaveBeenCalledOnce()
+  })
+})
+
+// ── hardening AC 3, 8 — GET rate limited ────────────────────────────────────
+describe('GET /api/hedges — rate limited (hardening AC 3, 8)', () => {
+  it('checkRateLimit ok:false for hedges:read → 429 RATE_LIMITED with Retry-After, findMany never called', async () => {
+    setCookie('anon-A')
+    mocks.checkRateLimit.mockResolvedValue({ ok: false, remaining: 0 })
+
+    const res = await GET(getReq())
+
+    expect(res.status).toBe(429)
+    expect(res.headers.get('Retry-After')).toBe('60')
+    await expect(res.json()).resolves.toEqual({
+      ok: false,
+      error: {
+        code: 'RATE_LIMITED',
+        message: 'Too many requests. Try again shortly.',
+      },
+    })
+    expect(mocks.findManySavedHedge).not.toHaveBeenCalled()
+  })
+
+  it('is checked against the hedges:read bucket with the configured limit/window', async () => {
+    mocks.checkRateLimit.mockResolvedValue({ ok: true, remaining: 59 })
+
+    await GET(getReq())
+
+    expect(mocks.checkRateLimit).toHaveBeenCalledWith(
+      'hedges:read',
+      '1.2.3.4',
+      60,
+      60
+    )
+  })
+
+  it('checkRateLimit ok:true (fail-open / allowed) → proceeds to a normal 200', async () => {
+    setCookie('anon-A')
+    mocks.checkRateLimit.mockResolvedValue({ ok: true, remaining: 59 })
+    mocks.findManySavedHedge.mockResolvedValue([])
+
+    const res = await GET(getReq())
+
+    expect(res.status).toBe(200)
+  })
+})
+
+// ── hardening AC 15 — structured error logging on a forced 500 ─────────────
+describe('POST /api/hedges — logs a structured error on a forced 500 (hardening AC 15)', () => {
+  it('db.savedHedge.upsert rejects → 500 INTERNAL (unchanged envelope), logger.error called with an errorId', async () => {
+    setCookie('anon-A')
+    mocks.upsertSavedHedge.mockRejectedValue(new Error('db down'))
+
+    const res = await POST(postReq(validBody()))
+
+    expect(res.status).toBe(500)
+    await expect(res.json()).resolves.toEqual({
+      ok: false,
+      error: { code: 'INTERNAL', message: 'Something went wrong.' },
+    })
+    expect(mocks.loggerError).toHaveBeenCalledWith(
+      'POST /api/hedges failed',
+      expect.objectContaining({
+        route: 'POST /api/hedges',
+        errorId: 'test-err-id',
+        err: 'db down',
+      })
+    )
+  })
+})
+
+describe('GET /api/hedges — logs a structured error on a forced 500 (hardening AC 15)', () => {
+  it('db.savedHedge.findMany rejects → 500 INTERNAL (unchanged envelope), logger.error called', async () => {
+    setCookie('anon-A')
+    mocks.findManySavedHedge.mockRejectedValue(new Error('db down'))
+
+    const res = await GET(getReq())
+
+    expect(res.status).toBe(500)
+    await expect(res.json()).resolves.toEqual({
+      ok: false,
+      error: { code: 'INTERNAL', message: 'Something went wrong.' },
+    })
+    expect(mocks.loggerError).toHaveBeenCalledWith(
+      'GET /api/hedges failed',
+      expect.objectContaining({
+        route: 'GET /api/hedges',
+        errorId: 'test-err-id',
+        err: 'db down',
+      })
+    )
   })
 })

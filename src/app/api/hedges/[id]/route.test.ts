@@ -14,6 +14,10 @@ const mocks = vi.hoisted(() => ({
   findUniqueSavedHedge: vi.fn(),
   deleteSavedHedge: vi.fn(),
   findUniqueMarketSnapshot: vi.fn(),
+  checkRateLimit: vi.fn(),
+  clientIp: vi.fn(),
+  loggerError: vi.fn(),
+  loggerWarn: vi.fn(),
 }))
 
 vi.mock('server-only', () => ({}))
@@ -34,6 +38,46 @@ vi.mock('@/server/db', () => ({
       findUnique: mocks.findUniqueMarketSnapshot,
     },
   },
+}))
+
+// hardening: the route now reads `@/config/env` directly (RL_* tunables) —
+// mock it out (same idiom as `retrieve.test.ts`) so the real module's
+// `import 'server-only'` + `process.env` validation never runs.
+vi.mock('@/config/env', () => ({
+  env: {
+    RL_HEDGES_SAVE_LIMIT: 20,
+    RL_HEDGES_SAVE_WINDOW: 600,
+    RL_HEDGES_READ_LIMIT: 60,
+    RL_HEDGES_READ_WINDOW: 60,
+    RL_HEDGES_DELETE_LIMIT: 30,
+    RL_HEDGES_DELETE_WINDOW: 60,
+    RL_HEALTH_LIMIT: 120,
+    RL_HEALTH_WINDOW: 60,
+    LOG_LEVEL: 'info',
+  },
+}))
+
+// `@/server/log` does `import 'server-only'` — mock it out so it never loads
+// unmocked, and so `logger.error`/`logger.warn` calls are assertable.
+vi.mock('@/server/log', () => ({
+  logger: {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: mocks.loggerWarn,
+    error: mocks.loggerError,
+  },
+  newErrorId: () => 'test-err-id',
+}))
+
+// hardening AC 3, 4: both handlers now rate-limit first. Default the mock to
+// "allowed" so every existing assertion below is unaffected; individual
+// tests override to exercise the 429 path.
+vi.mock('@/server/rate-limit', () => ({
+  checkRateLimit: mocks.checkRateLimit,
+  checkHedgeRateLimit: vi.fn(async () => ({ ok: true, remaining: 9 })),
+  clientIp: mocks.clientIp,
+  HEDGE_RATE_LIMIT: 10,
+  HEDGE_RATE_WINDOW_SECONDS: 600,
 }))
 
 import { DELETE, GET } from './route'
@@ -79,6 +123,8 @@ beforeEach(() => {
   mocks.findUniqueSavedHedge.mockResolvedValue(null)
   mocks.deleteSavedHedge.mockResolvedValue(undefined)
   mocks.findUniqueMarketSnapshot.mockResolvedValue(null)
+  mocks.checkRateLimit.mockResolvedValue({ ok: true, remaining: 59 })
+  mocks.clientIp.mockReturnValue('1.2.3.4')
 })
 
 // ── AC 4, 13, 14 — GET detail ────────────────────────────────────────────────
@@ -188,5 +234,144 @@ describe('DELETE /api/hedges/[id] — missing or foreign (AC 22)', () => {
 
     expect(res.status).toBe(404)
     expect(mocks.deleteSavedHedge).not.toHaveBeenCalled()
+  })
+})
+
+// ── hardening AC 3, 8 — GET rate limited ────────────────────────────────────
+describe('GET /api/hedges/[id] — rate limited (hardening AC 3, 8)', () => {
+  it('checkRateLimit ok:false for hedges:read → 429 with Retry-After, before any DB read', async () => {
+    mocks.checkRateLimit.mockResolvedValue({ ok: false, remaining: 0 })
+
+    const res = await GET(req('GET'), ctx())
+
+    expect(res.status).toBe(429)
+    expect(res.headers.get('Retry-After')).toBe('60')
+    await expect(res.json()).resolves.toEqual({
+      ok: false,
+      error: {
+        code: 'RATE_LIMITED',
+        message: 'Too many requests. Try again shortly.',
+      },
+    })
+    expect(mocks.findUniqueSavedHedge).not.toHaveBeenCalled()
+  })
+
+  it('is checked against the hedges:read bucket with the configured limit/window', async () => {
+    setCookie('anon-A')
+    mocks.findUniqueSavedHedge.mockResolvedValue(fakeRow())
+    mocks.checkRateLimit.mockResolvedValue({ ok: true, remaining: 59 })
+
+    await GET(req('GET'), ctx())
+
+    expect(mocks.checkRateLimit).toHaveBeenCalledWith(
+      'hedges:read',
+      '1.2.3.4',
+      60,
+      60
+    )
+  })
+
+  it('checkRateLimit ok:true (fail-open / allowed) → proceeds to a normal 200', async () => {
+    setCookie('anon-A')
+    mocks.findUniqueSavedHedge.mockResolvedValue(fakeRow())
+    mocks.checkRateLimit.mockResolvedValue({ ok: true, remaining: 59 })
+
+    const res = await GET(req('GET'), ctx())
+
+    expect(res.status).toBe(200)
+  })
+})
+
+// ── hardening AC 4, 8 — DELETE rate limited ─────────────────────────────────
+describe('DELETE /api/hedges/[id] — rate limited (hardening AC 4, 8)', () => {
+  it('checkRateLimit ok:false for hedges:delete → 429 with Retry-After, before any DB write', async () => {
+    mocks.checkRateLimit.mockResolvedValue({ ok: false, remaining: 0 })
+
+    const res = await DELETE(req('DELETE'), ctx())
+
+    expect(res.status).toBe(429)
+    expect(res.headers.get('Retry-After')).toBe('60')
+    await expect(res.json()).resolves.toEqual({
+      ok: false,
+      error: {
+        code: 'RATE_LIMITED',
+        message: 'Too many requests. Try again shortly.',
+      },
+    })
+    expect(mocks.deleteSavedHedge).not.toHaveBeenCalled()
+    expect(mocks.findUniqueSavedHedge).not.toHaveBeenCalled()
+  })
+
+  it('is checked against the hedges:delete bucket with the configured limit/window', async () => {
+    setCookie('anon-A')
+    mocks.findUniqueSavedHedge.mockResolvedValue(fakeRow())
+    mocks.checkRateLimit.mockResolvedValue({ ok: true, remaining: 29 })
+
+    await DELETE(req('DELETE'), ctx())
+
+    expect(mocks.checkRateLimit).toHaveBeenCalledWith(
+      'hedges:delete',
+      '1.2.3.4',
+      30,
+      60
+    )
+  })
+
+  it('checkRateLimit ok:true (fail-open / allowed) → proceeds to a normal 200', async () => {
+    setCookie('anon-A')
+    mocks.findUniqueSavedHedge.mockResolvedValue(fakeRow())
+    mocks.checkRateLimit.mockResolvedValue({ ok: true, remaining: 29 })
+
+    const res = await DELETE(req('DELETE'), ctx())
+
+    expect(res.status).toBe(200)
+  })
+})
+
+// ── hardening AC 15 — structured error logging on a forced 500 ─────────────
+describe('GET /api/hedges/[id] — logs a structured error on a forced 500 (hardening AC 15)', () => {
+  it('db.savedHedge.findUnique rejects → 500 INTERNAL (unchanged envelope), logger.error called with an errorId', async () => {
+    setCookie('anon-A')
+    mocks.findUniqueSavedHedge.mockRejectedValue(new Error('db down'))
+
+    const res = await GET(req('GET'), ctx())
+
+    expect(res.status).toBe(500)
+    await expect(res.json()).resolves.toEqual({
+      ok: false,
+      error: { code: 'INTERNAL', message: 'Something went wrong.' },
+    })
+    expect(mocks.loggerError).toHaveBeenCalledWith(
+      'GET /api/hedges/[id] failed',
+      expect.objectContaining({
+        route: 'GET /api/hedges/[id]',
+        errorId: 'test-err-id',
+        err: 'db down',
+      })
+    )
+  })
+})
+
+describe('DELETE /api/hedges/[id] — logs a structured error on a forced 500 (hardening AC 15)', () => {
+  it('db.savedHedge.delete rejects → 500 INTERNAL (unchanged envelope), logger.error called', async () => {
+    setCookie('anon-A')
+    mocks.findUniqueSavedHedge.mockResolvedValue(fakeRow())
+    mocks.deleteSavedHedge.mockRejectedValue(new Error('db down'))
+
+    const res = await DELETE(req('DELETE'), ctx())
+
+    expect(res.status).toBe(500)
+    await expect(res.json()).resolves.toEqual({
+      ok: false,
+      error: { code: 'INTERNAL', message: 'Something went wrong.' },
+    })
+    expect(mocks.loggerError).toHaveBeenCalledWith(
+      'DELETE /api/hedges/[id] failed',
+      expect.objectContaining({
+        route: 'DELETE /api/hedges/[id]',
+        errorId: 'test-err-id',
+        err: 'db down',
+      })
+    )
   })
 })
